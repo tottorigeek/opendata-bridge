@@ -1,0 +1,94 @@
+// Prisma schema for OpenData Bridge (官民共存型オープンデータ管理システム)
+// Phase 1: base schema. Do not remove fields — later phases depend on them.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  // DATABASE_URL: 通常のクエリはプーラー(Supabase Supavisor, transaction mode, port 6543,
+  //   接続文字列に ?pgbouncer=true が必要)経由。
+  // DIRECT_URL: マイグレーション(prisma migrate deploy)は直接続(port 5432)を使う。
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  type      OrgType
+  createdAt DateTime @default(now())
+  users     User[]
+  datasets  Dataset[]
+}
+
+enum OrgType {
+  GOVERNMENT
+  PRIVATE
+}
+
+model User {
+  id             String       @id @default(cuid())
+  email          String       @unique
+  passwordHash   String
+  name           String
+  role           Role         @default(MEMBER)
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  createdAt      DateTime     @default(now())
+  apiKeys        ApiKey[]
+}
+
+enum Role {
+  ADMIN
+  MEMBER
+}
+
+model Dataset {
+  id              String        @id @default(cuid())
+  title           String
+  description     String        @default("")
+  license         String        @default("CC-BY-4.0")
+  visibility      Visibility    @default(PRIVATE)
+  status          DatasetStatus @default(DRAFT)
+  tags            String        @default("") // カンマ区切り
+  updateFrequency String        @default("不定期")
+  sourceType      SourceType    @default(UPLOADED)
+  filePath        String? // storage/datasets/ 配下の相対パス
+  columnsJson     String        @default("[]") // カラム名配列のJSON
+  rowCount        Int           @default(0)
+  organizationId  String
+  organization    Organization  @relation(fields: [organizationId], references: [id])
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+enum Visibility {
+  PUBLIC
+  ORG_ONLY
+  PRIVATE
+}
+
+enum DatasetStatus {
+  DRAFT
+  PENDING_REVIEW
+  PUBLISHED
+  REJECTED
+}
+
+enum SourceType {
+  UPLOADED
+  MERGED
+}
+
+model ApiKey {
+  id        String    @id @default(cuid())
+  key       String    @unique
+  label     String
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  callCount Int       @default(0)
+  createdAt DateTime  @default(now())
+  revokedAt DateTime?
+}

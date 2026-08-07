@@ -27,7 +27,24 @@ export type MergeConfig = {
   /** 列名衝突時のリネーム用ラベル。 */
   datasetNameA: string;
   datasetNameB: string;
+  /**
+   * 出力行数の上限。超えた時点で MergeLimitExceededError を投げる。
+   * キーのカーディナリティが低いと結合は多対多になり、出力は最大 |A|×|B| 行まで
+   * 膨らむ。全行をメモリ上に持つ設計のため、上限が無いとプロセスが落ちる。
+   */
+  maxOutputRows?: number;
 };
+
+/** 出力行数の上限を超えたときに投げるエラー。呼び出し側で 413 に変換する。 */
+export class MergeLimitExceededError extends Error {
+  constructor(readonly maxOutputRows: number) {
+    super(
+      `マージ結果が上限(${maxOutputRows.toLocaleString()} 行)を超えました。` +
+        `キー列の値が重複しすぎている可能性があります。`,
+    );
+    this.name = "MergeLimitExceededError";
+  }
+}
 
 export type UnmatchedSample = {
   side: "A" | "B";
@@ -136,6 +153,16 @@ export function mergeTables(a: CsvTable, b: CsvTable, config: MergeConfig): Merg
   let matchedRowsA = 0;
   const unmatchedSamples: UnmatchedSample[] = [];
 
+  // 上限は「行を push する直前」に見る。全部組み立ててから切り詰めるのでは、
+  // その時点で既にメモリを使い切っているため意味がない。
+  const maxOutputRows = config.maxOutputRows ?? Number.POSITIVE_INFINITY;
+  const pushRow = (row: Record<string, string>) => {
+    if (rows.length >= maxOutputRows) {
+      throw new MergeLimitExceededError(maxOutputRows);
+    }
+    rows.push(row);
+  };
+
   const buildRow = (
     aRow: Record<string, string> | null,
     bRow: Record<string, string> | null,
@@ -164,13 +191,13 @@ export function mergeTables(a: CsvTable, b: CsvTable, config: MergeConfig): Merg
       matchedRowsA += 1;
       matchedBKeys.add(nk);
       for (const bRow of matches) {
-        rows.push(buildRow(aRow, bRow));
+        pushRow(buildRow(aRow, bRow));
       }
     } else {
       // アンマッチ
       addUnmatched("A", rawKey, nk, aRow);
       if (config.joinType === "left" || config.joinType === "full") {
-        rows.push(buildRow(aRow, null));
+        pushRow(buildRow(aRow, null));
       }
     }
   }
@@ -180,7 +207,7 @@ export function mergeTables(a: CsvTable, b: CsvTable, config: MergeConfig): Merg
     for (const bRow of b.rows) {
       const nk = normalizeValue(bRow[config.keyB] ?? "", config.level);
       if (nk === "" || !matchedBKeys.has(nk)) {
-        rows.push(buildRow(null, bRow));
+        pushRow(buildRow(null, bRow));
         addUnmatched("B", bRow[config.keyB] ?? "", nk, bRow);
       }
     }

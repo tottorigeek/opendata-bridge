@@ -1,14 +1,22 @@
 import "server-only";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import type { Organization, User } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import {
+  RATE_LIMITS,
+  consumeRateLimit,
+  sweepRateLimits,
+} from "@/lib/rate-limit";
 
 /** 公開 API キーのプレフィックス。 */
 export const API_KEY_PREFIX = "odb_";
 
 /** マスク表示で残す先頭文字数(プレフィックス + 4 文字)。 */
 const KEY_VISIBLE_PREFIX_LENGTH = API_KEY_PREFIX.length + 4;
+
+/** キー全文の長さ(プレフィックス + ランダム 32 文字)。マスク桁を揃えるのに使う。 */
+const KEY_TOTAL_LENGTH = API_KEY_PREFIX.length + 32;
 
 const KEY_ALPHABET =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -31,13 +39,28 @@ export function generateApiKey(): string {
 }
 
 /**
- * API キー全文を「先頭8文字 + マスク」に変換する(発行後の一覧表示用)。
- * 例: odb_ABCD**********************
+ * キー全文から DB 保存用の SHA-256(hex)を作る。
+ *
+ * パスワードと違いキーは十分な長さの高エントロピー乱数なので、
+ * 総当たりが成立せず bcrypt のようなストレッチは不要。
+ * 認証は毎リクエスト走るため、単純なハッシュで完全一致検索できる形にしておく。
  */
-export function maskApiKey(key: string): string {
-  if (key.length <= KEY_VISIBLE_PREFIX_LENGTH) return key;
-  const head = key.slice(0, KEY_VISIBLE_PREFIX_LENGTH);
-  return head + "*".repeat(Math.max(0, key.length - KEY_VISIBLE_PREFIX_LENGTH));
+export function hashApiKey(key: string): string {
+  return createHash("sha256").update(key, "utf8").digest("hex");
+}
+
+/** キー全文から一覧表示用のプレフィックス(先頭 8 文字)を取り出す。 */
+export function apiKeyPrefix(key: string): string {
+  return key.slice(0, KEY_VISIBLE_PREFIX_LENGTH);
+}
+
+/**
+ * 保存済みプレフィックスからマスク表示を組み立てる(発行後の一覧表示用)。
+ * 例: odb_ABCD**********************
+ * 全文は DB に存在しないため、プレフィックスだけから復元する。
+ */
+export function maskApiKey(prefix: string): string {
+  return prefix + "*".repeat(Math.max(0, KEY_TOTAL_LENGTH - prefix.length));
 }
 
 /** 認証済みユーザー + 所属組織の型(セッションと同形)。 */
@@ -89,8 +112,9 @@ export async function authenticateApiKey(
     };
   }
 
+  // 平文は保存していないため、提示された値をハッシュ化して突き合わせる。
   const apiKey = await prisma.apiKey.findUnique({
-    where: { key: token },
+    where: { keyHash: hashApiKey(token) },
     include: { user: { include: { organization: true } } },
   });
 
@@ -105,11 +129,25 @@ export async function authenticateApiKey(
     };
   }
 
+  // キー単位のレート制限。認証成功後に数えるので、無効キーの試行で
+  // 正規キーの枠を消費させられることはない。
+  const limit = await consumeRateLimit(`apikey:${apiKey.id}`, RATE_LIMITS.apiKey);
+  if (!limit.ok) {
+    const response = apiError(
+      429,
+      "rate_limited",
+      `リクエストが多すぎます。${limit.retryAfterSeconds} 秒後に再試行してください。`,
+    );
+    response.headers.set("Retry-After", String(limit.retryAfterSeconds));
+    return { ok: false, response };
+  }
+
   // 利用量計測: 呼び出しごとに callCount をインクリメント。
   await prisma.apiKey.update({
     where: { id: apiKey.id },
     data: { callCount: { increment: 1 } },
   });
+  await sweepRateLimits();
 
   return { ok: true, user: apiKey.user, apiKeyId: apiKey.id };
 }

@@ -5,8 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import {
   getCatalogDataset,
   parseTags,
-  ORG_TYPE_LABEL,
-  ORG_TYPE_BADGE_CLASS,
+  orgTypeBadge,
   VISIBILITY_LABEL,
 } from "@/lib/datasets";
 import { readCsvPreview } from "@/lib/csv";
@@ -53,13 +52,20 @@ export default async function CatalogDetailPage({
           </nav>
 
           <div className="mt-3 flex items-center gap-2">
-            <span
-              className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                ORG_TYPE_BADGE_CLASS[dataset.organization.type]
-              }`}
-            >
-              {ORG_TYPE_LABEL[dataset.organization.type]}
-            </span>
+            {(() => {
+              const badge = orgTypeBadge(
+                dataset.organization.type,
+                dataset.organization.verified,
+              );
+              return (
+                <span
+                  title={badge.title}
+                  className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${badge.className}`}
+                >
+                  {badge.label}
+                </span>
+              );
+            })()}
             {dataset.visibility === "ORG_ONLY" && (
               <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs text-slate-500">
                 {VISIBILITY_LABEL[dataset.visibility]}

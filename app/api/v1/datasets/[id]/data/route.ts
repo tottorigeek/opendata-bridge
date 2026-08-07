@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { stringify } from "csv-stringify/sync";
 import { authenticateApiKey, apiError } from "@/lib/api-auth";
+import { sanitizeCsvRows } from "@/lib/csv";
 import {
   findAccessibleDataset,
   readDatasetCsv,
@@ -45,7 +46,8 @@ export async function GET(
   const sliced = csv.rows.slice(offset, offset + limit);
 
   if (format === "csv") {
-    const body = stringify([csv.header, ...sliced]);
+    // Excel で開かれる前提の形式なので数式インジェクション対策を通す。
+    const body = stringify(sanitizeCsvRows([csv.header, ...sliced]));
     return new NextResponse(body, {
       status: 200,
       headers: {

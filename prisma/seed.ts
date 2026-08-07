@@ -127,17 +127,25 @@ async function main() {
     // ディレクトリが無ければ後段の保存で作成する
   }
 
+  await prisma.rateLimit.deleteMany();
+  await prisma.session.deleteMany();
   await prisma.apiKey.deleteMany();
   await prisma.dataset.deleteMany();
   await prisma.user.deleteMany();
   await prisma.organization.deleteMany();
 
   // --- 組織 ----------------------------------------------------------------
+  // デモの 2 組織は運営が確認済みの体で verified: true にする
+  // (通常のサインアップ経由で作られる組織は常に未確認から始まる)。
   const govOrg = await prisma.organization.create({
-    data: { name: "鳥取県庁", type: "GOVERNMENT" as OrgType },
+    data: { name: "鳥取県庁", type: "GOVERNMENT" as OrgType, verified: true },
   });
   const labOrg = await prisma.organization.create({
-    data: { name: "山陰データラボ株式会社", type: "PRIVATE" as OrgType },
+    data: {
+      name: "山陰データラボ株式会社",
+      type: "PRIVATE" as OrgType,
+      verified: true,
+    },
   });
   const orgIdByKey: Record<"gov" | "lab", string> = {
     gov: govOrg.id,

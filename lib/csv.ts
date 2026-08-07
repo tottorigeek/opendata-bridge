@@ -1,5 +1,6 @@
 import "server-only";
 import { parse } from "csv-parse/sync";
+import { stringify } from "csv-stringify/sync";
 import {
   saveDatasetCsv,
   readDatasetCsv,
@@ -39,6 +40,38 @@ export function decodeCsvBuffer(buffer: Buffer): string {
     // Shift_JIS(CP932 相当)としてデコード
     return new TextDecoder("shift_jis").decode(buf);
   }
+}
+
+/**
+ * Excel / LibreOffice が数式として解釈し始めるセルの先頭文字。
+ * タブ・CR も、前置されると後続の = 等が数式扱いになるため含める。
+ */
+const FORMULA_TRIGGER = /^[=+\-@\t\r]/;
+
+/** 符号付き数値・指数表記(-1.5, +3, 1e-4 など)。 */
+const NUMERIC_CELL = /^[+-]?(\d+(\.\d+)?|\.\d+)([eE][+-]?\d+)?$/;
+
+/**
+ * CSV 数式インジェクション(Formula Injection)対策。
+ *
+ * `=cmd|'/c calc'!A1` のようなセルを含む CSV を配信すると、受け取った利用者が
+ * Excel で開いた時点で数式として実行される。本システムは組織間でデータを
+ * 持ち寄って相互にダウンロードする前提なので、投稿側から取得側への攻撃経路になる。
+ * 危険な先頭文字を持つセルにシングルクォートを前置して、文字列として扱わせる。
+ *
+ * ただし `-1.5` のような負数は正当なデータなので、数値として解釈できるセルは
+ * そのまま通す(気温・増減など負数を含むオープンデータを壊さないため)。
+ */
+export function sanitizeCsvCell(value: string): string {
+  if (!value) return value;
+  if (!FORMULA_TRIGGER.test(value)) return value;
+  if (NUMERIC_CELL.test(value)) return value;
+  return `'${value}`;
+}
+
+/** 2 次元配列の全セルに数式インジェクション対策を適用する。 */
+export function sanitizeCsvRows(rows: string[][]): string[][] {
+  return rows.map((row) => row.map((cell) => sanitizeCsvCell(cell)));
 }
 
 /** デコード済み CSV 文字列を 2 次元配列にパースする。 */
@@ -105,13 +138,17 @@ export async function readCsvPreview(
   };
 }
 
-/** 保存済み CSV の生バイト列(ダウンロード用。常に UTF-8 で返す)。 */
+/**
+ * 保存済み CSV の生バイト列(ダウンロード用。常に UTF-8 で返す)。
+ * 配信前に数式インジェクション対策を通すため、一度パースして組み立て直す。
+ */
 export async function readCsvForDownload(datasetId: string): Promise<Buffer | null> {
   const buffer = await readDatasetCsv(datasetId);
   if (!buffer) return null;
   // 元が Shift_JIS でも UTF-8 に正規化して配信する(BOM 付き UTF-8)
   const text = decodeCsvBuffer(buffer);
-  return Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(text, "utf-8")]);
+  const body = stringify(sanitizeCsvRows(parseCsvRows(text)));
+  return Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(body, "utf-8")]);
 }
 
 /** アップロードされたバッファを storage に保存する(UTF-8 に正規化して保存)。 */

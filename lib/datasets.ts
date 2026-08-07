@@ -40,6 +40,38 @@ export const ORG_TYPE_BADGE_CLASS: Record<string, string> = {
   PRIVATE: "bg-violet-100 text-violet-700",
 };
 
+export interface OrgTypeBadge {
+  label: string;
+  className: string;
+  /** マウスオーバー時の補足(未確認の場合に理由を示す)。 */
+  title: string;
+}
+
+/**
+ * 組織種別バッジの表示内容を決める。
+ *
+ * 組織種別は登録時の自己申告で、誰でも「行政」を名乗れてしまう。
+ * 種別バッジをそのまま出すと公的機関の裏付けがあるかのように見えるため、
+ * 運営が確認済み(Organization.verified)のときだけ正式なバッジを出し、
+ * 未確認は「(未確認)」を添えて中立的な配色にする。
+ */
+export function orgTypeBadge(type: string, verified: boolean): OrgTypeBadge {
+  const label = ORG_TYPE_LABEL[type] ?? type;
+  if (verified) {
+    return {
+      label,
+      className: ORG_TYPE_BADGE_CLASS[type] ?? "bg-slate-100 text-slate-600",
+      title: `運営が${label}組織であることを確認済みです。`,
+    };
+  }
+  return {
+    label: `${label}(未確認)`,
+    className: "bg-slate-100 text-slate-500 ring-1 ring-inset ring-slate-300",
+    title:
+      "登録時の自己申告であり、運営による組織種別の確認は取れていません。",
+  };
+}
+
 // ---- 選択肢プリセット -------------------------------------------------------
 
 /** ライセンス選択肢(自由入力も可)。 */

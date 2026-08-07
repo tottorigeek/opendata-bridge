@@ -231,6 +231,27 @@ Integration を使わず、`Settings → Environment Variables`(Production / Pre
 テーブル(`_prisma_migrations` 含む)はすべて `opendata` スキーマ内に作成され、`public` には触れません。
 Supabase のテーブルエディタではスキーマ切替で `opendata` を選ぶと確認できます。
 
+### セキュリティ対策
+
+| 対策 | 内容 |
+| --- | --- |
+| API キー | DB には **SHA-256 ハッシュのみ**保存(`ApiKey.keyHash`)。全文は発行時レスポンスでしか返さず以降は復元不可。一覧表示は `keyPrefix`(先頭 8 文字)から組み立てる。 |
+| セッション失効 | JWT に `jti` を持たせ `Session` テーブルで台帳管理。ログアウトで `revokedAt` を立てるため、トークンが漏れても即座に無効化できる(`revokeAllUserSessions()` で全端末失効)。 |
+| レート制限 | `RateLimit` テーブルによる固定ウィンドウ方式(サーバーレスではインスタンス間でメモリを共有できないため DB を集計点にする)。ログイン 10回/5分(+ IP 30回/5分)、サインアップ 5回/時、公開 API 600回/分、マージ実行 20回/5分。 |
+| ユーザー列挙対策 | ログイン失敗時、ユーザー不在でもダミーハッシュに対して bcrypt を実行し、応答時間の差から登録有無が漏れないようにする。 |
+| CSV インジェクション | ダウンロード・API の CSV 出力で、`=` `+` `-` `@` 等で始まるセルにシングルクォートを前置(`-1.5` のような数値は除外)。他組織が Excel で開く前提のため必須。 |
+| マージの DoS 対策 | 入力 20 万行 / 出力 50 万行の上限。多対多結合による行数爆発を結合ループ内で検知して `413` を返す。 |
+| 組織種別の詐称対策 | 種別は登録時の自己申告のため、`Organization.verified` が `false` の間はカタログで「行政(未確認)」と中立表示する。 |
+| セキュリティヘッダ | `next.config.ts` で CSP / `X-Frame-Options` / `X-Content-Type-Options` / `Referrer-Policy` / `Permissions-Policy` / HSTS(本番のみ)を全レスポンスに付与。`X-Powered-By` は無効化。 |
+
+> **組織に verified を付与する方法**: 現状は管理 UI が無いため、Supabase の SQL Editor で
+> `UPDATE "Organization" SET "verified" = true WHERE id = '<組織ID>';` を実行します。
+> 公式ドメインのメールや公文書などで実在を確認してから付与してください。
+
+> **マイグレーションの注意**: `0002_security_hardening` は既存の平文 API キーを
+> PostgreSQL の `sha256()` でその場ハッシュ化するため、**発行済みキーは失効しません**。
+> `sha256()` は PostgreSQL 11 以降が必要です(Supabase は対応済み)。
+
 ### セキュリティ / ストレージの補足
 
 - **CSV の配信は必ずアプリのルート経由**です。バケットは **非公開(private)** で運用し、

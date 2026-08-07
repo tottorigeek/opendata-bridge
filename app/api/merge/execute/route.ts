@@ -5,9 +5,10 @@ import {
   readDatasetTable,
   buildMergedCsv,
 } from "@/lib/merge/datasets";
-import { mergeTables } from "@/lib/merge/engine";
+import { MergeLimitExceededError, mergeTables } from "@/lib/merge/engine";
 import { parseMergeRequest } from "@/lib/merge/request";
 import { prisma } from "@/lib/prisma";
+import { RATE_LIMITS, consumeRateLimit } from "@/lib/rate-limit";
 import { saveDatasetCsv, datasetStorageKey } from "@/lib/storage";
 
 const JOIN_LABEL: Record<string, string> = {
@@ -15,6 +16,11 @@ const JOIN_LABEL: Record<string, string> = {
   left: "左外部結合",
   full: "完全外部結合",
 };
+
+/** 入力 1 データセットあたりの最大行数。 */
+const MAX_INPUT_ROWS = 200_000;
+/** マージ結果の最大行数。多対多結合による行数爆発を止める。 */
+const MAX_OUTPUT_ROWS = 500_000;
 
 /**
  * POST /api/merge/execute
@@ -24,6 +30,17 @@ export async function POST(request: Request) {
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "認証が必要です。" }, { status: 401 });
+  }
+
+  // 全行マージは重い処理なので、ユーザー単位で実行頻度を絞る。
+  const limit = await consumeRateLimit(`merge:${user.id}`, RATE_LIMITS.merge);
+  if (!limit.ok) {
+    return NextResponse.json(
+      {
+        error: `マージの実行が多すぎます。${limit.retryAfterSeconds} 秒後に再試行してください。`,
+      },
+      { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } },
+    );
   }
 
   let body: unknown;
@@ -66,15 +83,34 @@ export async function POST(request: Request) {
     );
   }
 
-  const result = mergeTables(tableA, tableB, {
-    keyA: req.keyA,
-    keyB: req.keyB,
-    level: req.level,
-    joinType: req.joinType,
-    outputColumns: req.outputColumns,
-    datasetNameA: dsA.title,
-    datasetNameB: dsB.title,
-  });
+  if (tableA.rows.length > MAX_INPUT_ROWS || tableB.rows.length > MAX_INPUT_ROWS) {
+    return NextResponse.json(
+      {
+        error:
+          `マージできるのは 1 データセットあたり ${MAX_INPUT_ROWS.toLocaleString()} 行までです。`,
+      },
+      { status: 413 },
+    );
+  }
+
+  let result;
+  try {
+    result = mergeTables(tableA, tableB, {
+      keyA: req.keyA,
+      keyB: req.keyB,
+      level: req.level,
+      joinType: req.joinType,
+      outputColumns: req.outputColumns,
+      datasetNameA: dsA.title,
+      datasetNameB: dsB.title,
+      maxOutputRows: MAX_OUTPUT_ROWS,
+    });
+  } catch (e) {
+    if (e instanceof MergeLimitExceededError) {
+      return NextResponse.json({ error: e.message }, { status: 413 });
+    }
+    throw e;
+  }
 
   const rowCount = result.rows.length;
   const matchPct = (result.stats.matchRate * 100).toFixed(1);

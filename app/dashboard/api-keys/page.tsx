@@ -19,7 +19,7 @@ export default async function ApiKeysPage() {
   const initialKeys: ApiKeyRow[] = keys.map((k) => ({
     id: k.id,
     label: k.label,
-    maskedKey: maskApiKey(k.key),
+    maskedKey: maskApiKey(k.keyPrefix),
     callCount: k.callCount,
     revoked: k.revokedAt !== null,
     createdAt: k.createdAt.toISOString(),

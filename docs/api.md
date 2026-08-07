@@ -17,8 +17,15 @@ Authorization: Bearer odb_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 - API キーはダッシュボード `/dashboard/api-keys` で発行します。
 - 発行直後のみ全文が表示されます。以降は先頭のみ表示され、全文は再表示できません。
+  サーバー側は **SHA-256 ハッシュのみを保存**しており、平文は保持していないため、
+  紛失した場合は再発行が必要です(運営側でも復元できません)。
 - キーは失効(revoke)できます。失効後のキーでのアクセスは `401` になります。
 - 呼び出しごとに、そのキーの呼び出し回数(callCount)が加算されます。
+
+### レート制限
+
+API キー単位で **60 秒あたり 600 リクエスト**までです。超過すると `429` を返し、
+`Retry-After` ヘッダに次に試行できるまでの秒数が入ります。
 
 ### アクセスできるデータの範囲(認可)
 
@@ -49,6 +56,11 @@ Authorization: Bearer odb_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 | 404        | `not_found`         | データセットが無い、またはアクセス権が無い  |
 | 404        | `data_not_available`| データ本体(CSV)が未登録                   |
 | 400        | `invalid_format`    | `format` が `json` / `csv` 以外            |
+| 429        | `rate_limited`      | レート制限超過(`Retry-After` を参照)      |
+
+> `format=csv` で取得した CSV は、表計算ソフトでの数式実行(CSV インジェクション)を
+> 防ぐため、`=` `+` `-` `@` で始まるセルの先頭にシングルクォートを付与しています
+> (`-1.5` のような数値はそのままです)。
 
 ---
 

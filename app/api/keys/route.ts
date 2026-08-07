@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { generateApiKey, maskApiKey } from "@/lib/api-auth";
+import {
+  apiKeyPrefix,
+  generateApiKey,
+  hashApiKey,
+  maskApiKey,
+} from "@/lib/api-auth";
 
 /**
  * GET /api/keys
@@ -24,7 +29,7 @@ export async function GET() {
     keys: keys.map((k) => ({
       id: k.id,
       label: k.label,
-      maskedKey: maskApiKey(k.key),
+      maskedKey: maskApiKey(k.keyPrefix),
       callCount: k.callCount,
       revoked: k.revokedAt !== null,
       createdAt: k.createdAt.toISOString(),
@@ -66,9 +71,16 @@ export async function POST(request: Request) {
     );
   }
 
+  // 全文はここでしか存在しない。DB にはハッシュと表示用プレフィックスだけを保存し、
+  // 平文はこのレスポンスで返したあと破棄する(DB が漏れてもキーは復元できない)。
   const key = generateApiKey();
   const created = await prisma.apiKey.create({
-    data: { key, label, userId: user.id },
+    data: {
+      keyHash: hashApiKey(key),
+      keyPrefix: apiKeyPrefix(key),
+      label,
+      userId: user.id,
+    },
   });
 
   return NextResponse.json(
@@ -76,7 +88,7 @@ export async function POST(request: Request) {
       id: created.id,
       label: created.label,
       // 発行直後のみ全文を返す(以降は取得不可)。
-      key: created.key,
+      key,
       callCount: created.callCount,
       createdAt: created.createdAt.toISOString(),
     },

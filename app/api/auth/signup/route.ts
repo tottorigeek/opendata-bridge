@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createSession, hashPassword } from "@/lib/auth";
+import {
+  RATE_LIMITS,
+  clientIp,
+  consumeRateLimit,
+  sweepRateLimits,
+} from "@/lib/rate-limit";
 
 type OrgType = "GOVERNMENT" | "PRIVATE";
 
@@ -40,6 +46,21 @@ export async function POST(request: Request) {
     );
   }
 
+  // 組織の大量作成(特に行政を騙る組織)を抑止する。
+  const limit = await consumeRateLimit(
+    `signup:ip:${clientIp(request)}`,
+    RATE_LIMITS.signup,
+  );
+  if (!limit.ok) {
+    return NextResponse.json(
+      {
+        error: `登録の試行が多すぎます。${limit.retryAfterSeconds} 秒後に再試行してください。`,
+      },
+      { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } },
+    );
+  }
+  await sweepRateLimits();
+
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
     return NextResponse.json(
@@ -51,9 +72,16 @@ export async function POST(request: Request) {
   const passwordHash = await hashPassword(password);
 
   // 組織を新規作成し、その ADMIN として登録者を作成する。
+  // orgType はあくまで自己申告なので verified は必ず false から始める。
+  // 「行政」を名乗るだけで公的機関として信用されないよう、
+  // カタログ側は verified を見てバッジ表示を出し分ける。
   const user = await prisma.$transaction(async (tx) => {
     const org = await tx.organization.create({
-      data: { name: organizationName, type: orgType as OrgType },
+      data: {
+        name: organizationName,
+        type: orgType as OrgType,
+        verified: false,
+      },
     });
     return tx.user.create({
       data: {

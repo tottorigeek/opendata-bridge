@@ -41,6 +41,12 @@ export const RATE_LIMITS = {
   apiKey: { limit: 600, windowSeconds: 60 },
   /** マージ実行: 重い処理なので絞る。 */
   merge: { limit: 20, windowSeconds: 300 },
+  /**
+   * 外部データソースの取得(同期・接続テスト)。
+   * 本システムを踏み台にして外部へリクエストを飛ばせる経路でもあるため、
+   * 組織単位で回数を抑える。
+   */
+  sourceFetch: { limit: 60, windowSeconds: 300 },
 } as const satisfies Record<string, RateLimitRule>;
 
 /** now を含む固定ウィンドウの開始時刻を求める(エポックからの切り捨て)。 */

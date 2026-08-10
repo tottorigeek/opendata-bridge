@@ -9,8 +9,14 @@ import {
   VISIBILITY_LABEL,
 } from "@/lib/datasets";
 import { readCsvPreview } from "@/lib/csv";
+import { prisma } from "@/lib/prisma";
+import { parseFieldMap } from "@/lib/sources/transform";
 import CsvPreviewTable from "@/components/datasets/CsvPreviewTable";
 import DatasetDetailActions from "@/components/datasets/DatasetDetailActions";
+import DataSourcePanel, {
+  type SourceConfig,
+  type SyncRunRow,
+} from "@/components/datasets/DataSourcePanel";
 
 function formatDateTime(d: Date): string {
   return new Intl.DateTimeFormat("ja-JP", {
@@ -38,6 +44,40 @@ export default async function DatasetDetailPage({
     ? await readCsvPreview(dataset.id, 50)
     : { columns: [], rows: [], totalRows: 0 };
   const tags = parseTags(dataset.tags);
+
+  const source = await prisma.dataSource.findUnique({
+    where: { datasetId: dataset.id },
+    include: { runs: { orderBy: { startedAt: "desc" }, take: 10 } },
+  });
+
+  // 認証値(暗号文)はクライアントへ渡さない。設定済みかどうかだけを伝える。
+  const sourceConfig: SourceConfig | null = source
+    ? {
+        kind: source.kind,
+        endpoint: source.endpoint,
+        authType: source.authType,
+        authParamName: source.authParamName,
+        hasAuthValue: source.authValueEnc.length > 0,
+        recordsPath: source.recordsPath,
+        fieldMap: parseFieldMap(source.fieldMapJson),
+        syncMode: source.syncMode,
+        lastSyncedAt: source.lastSyncedAt?.toISOString() ?? null,
+        lastStatus: source.lastStatus,
+        lastMessage: source.lastMessage,
+        lastRowCount: source.lastRowCount,
+      }
+    : null;
+
+  const syncRuns: SyncRunRow[] =
+    source?.runs.map((run) => ({
+      id: run.id,
+      status: run.status,
+      rowCount: run.rowCount,
+      message: run.message,
+      triggeredBy: run.triggeredBy,
+      startedAt: run.startedAt.toISOString(),
+      durationMs: run.durationMs,
+    })) ?? [];
 
   return (
     <div>
@@ -136,6 +176,15 @@ export default async function DatasetDetailPage({
           id={dataset.id}
           status={dataset.status}
           isAdmin={user.role === "ADMIN"}
+        />
+      </div>
+
+      {/* 外部データソース */}
+      <div className="mt-8">
+        <DataSourcePanel
+          datasetId={dataset.id}
+          initialConfig={sourceConfig}
+          initialRuns={syncRuns}
         />
       </div>
 

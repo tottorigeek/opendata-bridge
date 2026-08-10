@@ -80,8 +80,10 @@ model Dataset {
   rowCount        Int           @default(0)
   organizationId  String
   organization    Organization  @relation(fields: [organizationId], references: [id])
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  /// 外部 API から取り込む場合の接続設定(sourceType = API のとき設定される)。
+  dataSource DataSource?
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
 }
 
 enum Visibility {
@@ -100,6 +102,94 @@ enum DatasetStatus {
 enum SourceType {
   UPLOADED
   MERGED
+  /// 外部 API / CSV URL から定期的に取り込んでいるデータセット。
+  API
+}
+
+/// 外部データソースの接続設定(Dataset と 1:1)。
+///
+/// 取り込んだデータは既存の CSV ストレージへ materialize する。こうすると
+/// カタログ・ダウンロード・マージエンジン・公開 API v1 は「CSV を読む」という
+/// 従来どおりの経路のままで、アップロード由来のデータセットと完全に共存できる。
+/// つまり本モデルは「CSV を誰が埋めるか(人か外部システムか)」だけを足している。
+model DataSource {
+  id        String  @id @default(cuid())
+  datasetId String  @unique
+  dataset   Dataset @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+
+  kind     SourceKind
+  /// 取得先 URL。SSRF 対策のため、実行時に必ず lib/sources/fetch.ts の検証を通す。
+  endpoint String
+
+  authType SourceAuthType @default(NONE)
+  /// 認証値(APIキー等)を AES-256-GCM で暗号化したもの。平文では保存しない。
+  authValueEnc String @default("")
+  /// authType = HEADER のときのヘッダ名 / QUERY のときのクエリパラメータ名。
+  authParamName String @default("")
+
+  /// REST_JSON のとき、レコード配列が入っている場所(例: "result.records")。
+  /// 空ならレスポンス直下が配列であることを期待する。
+  recordsPath String @default("")
+  /// 列マッピング [{ from, to }] の JSON。空配列なら取得側のキーをそのまま列名にする。
+  fieldMapJson String @default("[]")
+
+  syncMode SyncMode @default(MANUAL)
+
+  lastSyncedAt DateTime?
+  lastStatus   SyncStatus?
+  lastMessage  String      @default("")
+  lastRowCount Int         @default(0)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  runs      SyncRun[]
+
+  @@index([syncMode])
+}
+
+enum SourceKind {
+  /// JSON を返す REST API(CKAN datastore_search など)。
+  REST_JSON
+  /// CSV を直接返す URL。
+  CSV_URL
+}
+
+enum SourceAuthType {
+  NONE
+  /// Authorization: Bearer <値>
+  BEARER
+  /// 任意ヘッダ(authParamName: 値)
+  HEADER
+  /// クエリパラメータ(?authParamName=値)
+  QUERY
+}
+
+enum SyncMode {
+  /// 手動実行のみ。
+  MANUAL
+  /// 定期実行(cron)の対象にする。
+  SCHEDULED
+}
+
+enum SyncStatus {
+  SUCCESS
+  FAILED
+}
+
+/// 同期の実行履歴。失敗の原因追跡と、定期実行が動いているかの確認に使う。
+model SyncRun {
+  id           String     @id @default(cuid())
+  dataSourceId String
+  dataSource   DataSource @relation(fields: [dataSourceId], references: [id], onDelete: Cascade)
+  status       SyncStatus
+  rowCount     Int        @default(0)
+  message      String     @default("")
+  /// 手動実行か定期実行か。
+  triggeredBy String   @default("manual")
+  startedAt   DateTime @default(now())
+  durationMs  Int      @default(0)
+
+  @@index([dataSourceId, startedAt])
 }
 
 model ApiKey {

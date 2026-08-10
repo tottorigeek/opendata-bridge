@@ -7,6 +7,8 @@ import {
   STATUS_LABEL,
   STATUS_BADGE_CLASS,
   VISIBILITY_LABEL,
+  SOURCE_TYPE_LABEL,
+  SOURCE_TYPE_BADGE_CLASS,
 } from "@/lib/datasets";
 
 function formatDate(d: Date): string {
@@ -114,6 +116,15 @@ export default async function DatasetsPage() {
                     >
                       {d.title}
                     </Link>
+                    {d.sourceType !== "UPLOADED" && (
+                      <span
+                        className={`ml-2 rounded-full px-2 py-0.5 text-xs font-medium ${
+                          SOURCE_TYPE_BADGE_CLASS[d.sourceType]
+                        }`}
+                      >
+                        {SOURCE_TYPE_LABEL[d.sourceType]}
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <span

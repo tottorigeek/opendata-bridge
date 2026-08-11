@@ -6,6 +6,8 @@ import {
   getCatalogDataset,
   parseTags,
   orgTypeBadge,
+  effectiveRegion,
+  formatRegion,
   VISIBILITY_LABEL,
 } from "@/lib/datasets";
 import { readCsvPreview } from "@/lib/csv";
@@ -98,6 +100,26 @@ export default async function CatalogDetailPage({
 
           {/* メタデータ */}
           <dl className="mt-8 grid gap-x-8 gap-y-4 rounded-xl border border-slate-200 bg-white p-6 sm:grid-cols-2">
+            <div>
+              <dt className="text-xs font-medium text-slate-500">対象地域</dt>
+              <dd className="mt-0.5 text-sm text-slate-800">
+                {(() => {
+                  const region = effectiveRegion(dataset);
+                  const label = formatRegion(region);
+                  if (!label) return "未設定";
+                  return (
+                    <>
+                      {label}
+                      {region.inherited && (
+                        <span className="ml-1 text-xs text-slate-500">
+                          (提供組織の所在地)
+                        </span>
+                      )}
+                    </>
+                  );
+                })()}
+              </dd>
+            </div>
             <div>
               <dt className="text-xs font-medium text-slate-500">ライセンス</dt>
               <dd className="mt-0.5 text-sm text-slate-800">{dataset.license}</dd>

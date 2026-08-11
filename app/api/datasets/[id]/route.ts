@@ -6,6 +6,7 @@ import {
   parseTags,
   isVisibility,
   getOwnedDataset,
+  parseRegionInput,
 } from "@/lib/datasets";
 import {
   extractCsvMeta,
@@ -56,6 +57,12 @@ export async function PATCH(
     return NextResponse.json({ error: "公開範囲が不正です。" }, { status: 400 });
   }
 
+  // 対象地域はフォームが常に送るため、未選択は「解除」として null を書き込む。
+  const region = parseRegionInput(
+    form.get("prefecture"),
+    form.get("municipality"),
+  );
+
   const data: {
     title: string;
     description: string;
@@ -63,6 +70,8 @@ export async function PATCH(
     visibility: typeof visibility;
     tags: string;
     updateFrequency: string;
+    prefecture: string | null;
+    municipality: string | null;
     columnsJson?: string;
     rowCount?: number;
     filePath?: string;
@@ -73,6 +82,8 @@ export async function PATCH(
     visibility,
     tags: formatTags(parseTags(tagsRaw)),
     updateFrequency,
+    prefecture: region.prefecture,
+    municipality: region.municipality,
   };
 
   // CSV 差し替え(任意)

@@ -47,6 +47,8 @@ export default async function EditDatasetPage({
             updateFrequency: dataset.updateFrequency,
             visibility: dataset.visibility,
             hasFile: !!dataset.filePath,
+            prefecture: dataset.prefecture,
+            municipality: dataset.municipality,
           }}
         />
       </div>

@@ -22,9 +22,15 @@ model Organization {
   /// 登録時は自己申告のため常に false。運営が確認して初めて true にする。
   /// カタログの「行政」バッジはこのフラグが true のときだけ正式表示する。
   verified  Boolean   @default(false)
-  createdAt DateTime  @default(now())
-  users     User[]
-  datasets  Dataset[]
+  /// 組織の所在自治体(都道府県 / 市区町村)。lib/regions.ts のマスタ値を入れる。
+  /// データセット側に対象地域が未設定のとき、カタログ検索はここへフォールバックする。
+  prefecture   String?
+  municipality String?
+  createdAt    DateTime  @default(now())
+  users        User[]
+  datasets     Dataset[]
+
+  @@index([prefecture, municipality])
 }
 
 enum OrgType {
@@ -78,10 +84,18 @@ model Dataset {
   filePath        String? // storage/datasets/ 配下の相対パス
   columnsJson     String        @default("[]") // カラム名配列のJSON
   rowCount        Int           @default(0)
+  /// データが対象とする地域(都道府県 / 市区町村)。lib/regions.ts のマスタ値を入れる。
+  /// この 2 列は 1 組の「対象地域」として扱う。prefecture が null のときだけ
+  /// 発行組織の所在地へフォールバックし、prefecture だけ継承することはしない
+  /// (例: 対象地域が島根県のデータに、組織所在地の鳥取市が混ざるのを防ぐ)。
+  prefecture      String?
+  municipality    String?
   organizationId  String
   organization    Organization  @relation(fields: [organizationId], references: [id])
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
+
+  @@index([prefecture, municipality])
 }
 
 enum Visibility {

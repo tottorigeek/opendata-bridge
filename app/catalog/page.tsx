@@ -1,13 +1,23 @@
 import Link from "next/link";
 import SiteHeader from "@/components/SiteHeader";
+import RegionFilter from "@/components/catalog/RegionFilter";
 import { getCurrentUser } from "@/lib/auth";
 import {
   listCatalogDatasets,
   collectCatalogTags,
   parseTags,
   orgTypeBadge,
+  effectiveRegion,
+  formatRegion,
   VISIBILITY_LABEL,
 } from "@/lib/datasets";
+import {
+  PREFECTURES,
+  allPrefectureGroups,
+  isValidMunicipality,
+  isValidPrefecture,
+  municipalitiesOf,
+} from "@/lib/regions";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +32,13 @@ function formatDate(d: Date): string {
 export default async function CatalogPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; type?: string; tag?: string }>;
+  searchParams: Promise<{
+    q?: string;
+    type?: string;
+    tag?: string;
+    pref?: string;
+    city?: string;
+  }>;
 }) {
   const user = await getCurrentUser();
   const sp = await searchParams;
@@ -32,8 +48,30 @@ export default async function CatalogPage({
     sp.type === "GOVERNMENT" || sp.type === "PRIVATE" ? sp.type : undefined;
   const tag = sp.tag?.trim() || "";
 
+  // 地域はマスタに存在する値だけを採用する(不正値は未指定として扱う)。
+  const prefInput = sp.pref?.trim() || "";
+  const prefecture = isValidPrefecture(prefInput) ? prefInput : "";
+  const cityInput = sp.city?.trim() || "";
+  const municipality = isValidMunicipality(
+    cityInput,
+    prefecture || undefined,
+  )
+    ? cityInput
+    : "";
+
+  // 都道府県が選ばれていればその県の市区町村だけ、未選択なら全県を optgroup で出す。
+  const municipalityGroups = prefecture
+    ? [{ pref: prefecture, names: municipalitiesOf(prefecture) }]
+    : allPrefectureGroups();
+
   const [datasets, allTags] = await Promise.all([
-    listCatalogDatasets(user, { keyword, orgType, tag: tag || undefined }),
+    listCatalogDatasets(user, {
+      keyword,
+      orgType,
+      tag: tag || undefined,
+      prefecture: prefecture || undefined,
+      municipality: municipality || undefined,
+    }),
     collectCatalogTags(user),
   ]);
 
@@ -77,6 +115,14 @@ export default async function CatalogPage({
                 <option value="PRIVATE">民間</option>
               </select>
             </div>
+            <RegionFilter
+              prefectures={PREFECTURES}
+              prefecture={prefecture}
+              municipality={municipality}
+              groups={municipalityGroups}
+              selectClassName={inputClass}
+              labelClassName="mb-1 block text-xs font-medium text-slate-600"
+            />
             {tag && <input type="hidden" name="tag" value={tag} />}
             <div className="flex gap-2">
               <button
@@ -85,7 +131,7 @@ export default async function CatalogPage({
               >
                 検索
               </button>
-              {(keyword || orgType || tag) && (
+              {(keyword || orgType || tag || prefecture || municipality) && (
                 <Link
                   href="/catalog"
                   className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
@@ -105,6 +151,8 @@ export default async function CatalogPage({
                 const qs = new URLSearchParams();
                 if (keyword) qs.set("q", keyword);
                 if (orgType) qs.set("type", orgType);
+                if (prefecture) qs.set("pref", prefecture);
+                if (municipality) qs.set("city", municipality);
                 if (!active) qs.set("tag", t);
                 const href = `/catalog${qs.toString() ? `?${qs}` : ""}`;
                 return (
@@ -142,6 +190,7 @@ export default async function CatalogPage({
             <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {datasets.map((d) => {
                 const tags = parseTags(d.tags);
+                const region = formatRegion(effectiveRegion(d));
                 return (
                   <Link
                     key={d.id}
@@ -174,6 +223,11 @@ export default async function CatalogPage({
                       {d.description || "（説明なし）"}
                     </p>
                     <div className="mt-3 flex flex-wrap gap-1">
+                      {region && (
+                        <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                          {region}
+                        </span>
+                      )}
                       {tags.slice(0, 3).map((t) => (
                         <span
                           key={t}

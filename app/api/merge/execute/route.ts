@@ -5,22 +5,19 @@ import {
   readDatasetTable,
   buildMergedCsv,
 } from "@/lib/merge/datasets";
-import { MergeLimitExceededError, mergeTables } from "@/lib/merge/engine";
+import {
+  DEFAULT_MAX_OUTPUT_ROWS,
+  MERGE_KINDS,
+  MergeLimitExceededError,
+  mergeTables,
+} from "@/lib/merge/engine";
 import { parseMergeRequest } from "@/lib/merge/request";
 import { prisma } from "@/lib/prisma";
 import { RATE_LIMITS, consumeRateLimit } from "@/lib/rate-limit";
 import { saveDatasetCsv, datasetStorageKey } from "@/lib/storage";
 
-const JOIN_LABEL: Record<string, string> = {
-  inner: "内部結合",
-  left: "左外部結合",
-  full: "完全外部結合",
-};
-
 /** 入力 1 データセットあたりの最大行数。 */
 const MAX_INPUT_ROWS = 200_000;
-/** マージ結果の最大行数。多対多結合による行数爆発を止める。 */
-const MAX_OUTPUT_ROWS = 500_000;
 
 /**
  * POST /api/merge/execute
@@ -103,7 +100,7 @@ export async function POST(request: Request) {
       outputColumns: req.outputColumns,
       datasetNameA: dsA.title,
       datasetNameB: dsB.title,
-      maxOutputRows: MAX_OUTPUT_ROWS,
+      maxOutputRows: DEFAULT_MAX_OUTPUT_ROWS,
     });
   } catch (e) {
     if (e instanceof MergeLimitExceededError) {
@@ -113,12 +110,13 @@ export async function POST(request: Request) {
   }
 
   const rowCount = result.rows.length;
-  const matchPct = (result.stats.matchRate * 100).toFixed(1);
-  const joinLabel = JOIN_LABEL[req.joinType] ?? req.joinType;
+  const matchPct = (result.stats.analysis.a.coverage * 100).toFixed(1);
+  const kindLabel =
+    MERGE_KINDS.find((k) => k.value === req.kind)?.label ?? req.kind;
   const description =
     `「${dsA.title}」と「${dsB.title}」をマージ` +
-    `(キー: ${req.keyA} ⇔ ${req.keyB}、正規化: ${req.level}、結合: ${joinLabel}、` +
-    `マッチ率: ${matchPct}%)`;
+    `(${kindLabel}、キー: ${req.keyA} ⇔ ${req.keyB}、正規化: ${req.level}、` +
+    `カバー率: ${matchPct}%)`;
 
   const title = `${dsA.title} × ${dsB.title}(マージ)`;
 

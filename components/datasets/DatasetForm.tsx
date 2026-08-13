@@ -36,6 +36,8 @@ export interface DatasetFormInitial {
   hasFile: boolean;
   prefecture: string | null;
   municipality: string | null;
+  /** マージ結果でライセンスを自動判定できなかった状態。 */
+  licenseUnresolved: boolean;
 }
 
 const inputClass =
@@ -136,6 +138,14 @@ export default function DatasetForm({
           className={inputClass}
         />
       </div>
+
+      {initial?.licenseUnresolved && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          このデータセットは、マージ元のライセンスから結果のライセンスを
+          自動で判定できませんでした。<strong>出典それぞれの条件を確認</strong>
+          したうえでライセンスを設定してください。設定するまで公開申請はできません。
+        </div>
+      )}
 
       <div className="grid gap-5 sm:grid-cols-2">
         <div>

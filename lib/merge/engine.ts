@@ -108,7 +108,22 @@ export type MergeStats = {
   analysis: KeyAnalysis;
 };
 
+/**
+ * 出力列 1 列分の由来。列名が衝突したときだけ接頭辞が付く仕様のため、
+ * 出力 CSV の列名だけでは出所が分からない。列単位の出典として来歴に保存する。
+ */
+export type ColumnOrigin = {
+  /** 出力 CSV での列名。 */
+  name: string;
+  /** どちらの入力から来たか。 */
+  source: "A" | "B";
+  /** 入力側での元の列名。 */
+  column: string;
+};
+
 export type MergeResult = {
+  /** 出力列の由来。resolveColumnNames が計算した対応をそのまま返す。 */
+  columnOrigins: ColumnOrigin[];
   columns: string[];
   rows: Record<string, string>[];
   stats: MergeStats;
@@ -242,6 +257,7 @@ export function mergeTables(a: CsvTable, b: CsvTable, config: MergeConfig): Merg
 
   return {
     columns,
+    columnOrigins: resolved,
     rows,
     stats: {
       outputRows: rows.length,

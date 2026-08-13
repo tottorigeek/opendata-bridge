@@ -31,6 +31,20 @@ export async function POST(
     );
   }
 
+  // ライセンス未確定のまま公開されるのを防ぐ関門。マージ結果で入力の
+  // ライセンスから自動判定できなかった場合にここで止まる
+  // (docs/design/merge-design.md §3-2)。
+  if (dataset.licenseUnresolved || !dataset.license.trim()) {
+    return NextResponse.json(
+      {
+        error:
+          "ライセンスが未確定です。出典のライセンス条件を確認し、" +
+          "編集画面でライセンスを設定してから申請してください。",
+      },
+      { status: 409 },
+    );
+  }
+
   await prisma.dataset.update({
     where: { id },
     data: { status: "PENDING_REVIEW" },

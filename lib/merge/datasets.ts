@@ -3,7 +3,8 @@
  * 他エージェント領域(app/dashboard/datasets 等)には触れず、ここで完結させる。
  */
 import "server-only";
-import type { Dataset } from "@prisma/client";
+import { createHash } from "node:crypto";
+import type { Dataset, Organization } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { SessionUser } from "@/lib/auth";
 import { readDatasetCsv } from "@/lib/storage";
@@ -36,15 +37,27 @@ export function canUseAsMergeSource(user: SessionUser, dataset: Dataset): boolea
 export async function getAccessibleDataset(
   user: SessionUser,
   datasetId: string,
-): Promise<Dataset | null> {
-  const ds = await prisma.dataset.findUnique({ where: { id: datasetId } });
+): Promise<(Dataset & { organization: Organization }) | null> {
+  const ds = await prisma.dataset.findUnique({
+    where: { id: datasetId },
+    // 来歴には発行組織名も写すため、ここで一緒に取っておく。
+    include: { organization: true },
+  });
   if (!ds) return null;
   if (!canUseAsMergeSource(user, ds)) return null;
   return ds;
 }
 
-/** データセットの CSV を読み込んでテーブル化する。filePath 未設定/未存在なら例外。 */
-export async function readDatasetTable(dataset: Dataset): Promise<CsvTable> {
+/**
+ * データセットの CSV を読み込み、テーブルと内容ハッシュを返す。
+ * filePath 未設定 / 実体が無い場合は例外。
+ *
+ * ハッシュ(SHA-256)は来歴に記録し、「マージ時点の出典と今の出典が同じか」の
+ * 判定に使う。版(バージョン)導入前でも陳腐化を検出できる。
+ */
+export async function readDatasetSource(
+  dataset: Dataset,
+): Promise<{ table: CsvTable; contentHash: string }> {
   if (!dataset.filePath) {
     throw new Error(`データセット「${dataset.title}」に CSV ファイルが紐付いていません。`);
   }
@@ -52,7 +65,15 @@ export async function readDatasetTable(dataset: Dataset): Promise<CsvTable> {
   if (!buffer) {
     throw new Error(`データセット「${dataset.title}」の CSV が見つかりません。`);
   }
-  return parseCsv(buffer.toString("utf8"));
+  return {
+    table: parseCsv(buffer.toString("utf8")),
+    contentHash: createHash("sha256").update(buffer).digest("hex"),
+  };
+}
+
+/** データセットの CSV を読み込んでテーブル化する。 */
+export async function readDatasetTable(dataset: Dataset): Promise<CsvTable> {
+  return (await readDatasetSource(dataset)).table;
 }
 
 /** マージ結果の列・行から保存用の CSV 文字列を生成する。 */

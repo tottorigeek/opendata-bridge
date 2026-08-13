@@ -1,0 +1,23 @@
+OpenData Bridge
+Copyright (c) 2026 tottorigeek
+
+本ソフトウェアは GNU Affero General Public License v3.0 (AGPL-3.0) で提供されます。
+詳細は LICENSE を参照してください。
+
+--------------------------------------------------------------------------------
+同梱データの出典
+--------------------------------------------------------------------------------
+
+lib/regions.ts(47 都道府県 / 1,741 市区町村のマスタ)
+
+  出典: 総務省「全国地方公共団体コード」
+        https://www.soumu.go.jp/denshijiti/code.html
+
+  都道府県名・市区町村名・全国地方公共団体コードという事実データのみを収録して
+  います。政府標準利用規約に基づき、出典を明示したうえで利用しています。
+
+  取得の便宜上、再配布データとして code4fukui/localgovjp
+  (https://github.com/code4fukui/localgovjp) を経由していますが、当該リポジトリ
+  固有の項目(緯度経度・URL・キャッチフレーズ等)は一切含んでいません。
+
+  マスタは scripts/generate-regions.mjs で再生成できます。

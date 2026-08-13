@@ -2,6 +2,7 @@ import "server-only";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { SessionUser } from "@/lib/auth";
+import { isValidMunicipality, isValidPrefecture } from "@/lib/regions";
 
 /**
  * データセット管理・公開カタログ用のドメインヘルパー。
@@ -137,6 +138,32 @@ export function formatTags(tags: string[]): string {
   return tags.join(",");
 }
 
+// ---- 地域の入力検証 ---------------------------------------------------------
+
+/**
+ * フォーム入力から地域(都道府県 / 市区町村)を検証して取り出す。
+ *
+ * マスタ(lib/regions.ts)に無い値は保存しない。市区町村は都道府県に
+ * 属していることまで検査し、県だけ妥当な場合は市区町村を落として県を残す。
+ * 県が不正・未指定なら、市区町村が来ていても両方 null にする
+ * (県の無い市区町村は同名が複数県にあり一意に定まらないため)。
+ */
+export function parseRegionInput(
+  prefectureRaw: unknown,
+  municipalityRaw: unknown,
+): { prefecture: string | null; municipality: string | null } {
+  const prefecture = String(prefectureRaw ?? "").trim();
+  const municipality = String(municipalityRaw ?? "").trim();
+
+  if (!prefecture || !isValidPrefecture(prefecture)) {
+    return { prefecture: null, municipality: null };
+  }
+  if (!municipality || !isValidMunicipality(municipality, prefecture)) {
+    return { prefecture, municipality: null };
+  }
+  return { prefecture, municipality };
+}
+
 // ---- 認可ヘルパー -----------------------------------------------------------
 
 /**
@@ -176,6 +203,84 @@ export interface CatalogFilters {
   keyword?: string;
   orgType?: "GOVERNMENT" | "PRIVATE";
   tag?: string;
+  /** 都道府県での絞り込み(任意)。 */
+  prefecture?: string;
+  /** 市区町村での絞り込み(任意)。都道府県と独立に指定できる。 */
+  municipality?: string;
+}
+
+/**
+ * データセットの「実効的な対象地域」を返す。
+ *
+ * データセット自身に対象地域(prefecture)が設定されていればそれを使い、
+ * 未設定なら発行組織の所在地へフォールバックする。都道府県と市区町村は
+ * 1 組として扱う(混在させない)。カタログ検索の条件(buildRegionWhere)と
+ * 同じ規則なので、表示と検索結果が食い違わない。
+ */
+export function effectiveRegion(dataset: {
+  prefecture: string | null;
+  municipality: string | null;
+  organization: { prefecture: string | null; municipality: string | null };
+}): { prefecture: string | null; municipality: string | null; inherited: boolean } {
+  if (dataset.prefecture) {
+    return {
+      prefecture: dataset.prefecture,
+      municipality: dataset.municipality,
+      inherited: false,
+    };
+  }
+  return {
+    prefecture: dataset.organization.prefecture,
+    municipality: dataset.organization.municipality,
+    inherited: true,
+  };
+}
+
+/** 実効的な対象地域の表示用文字列(例: "鳥取県 鳥取市")。未設定なら null。 */
+export function formatRegion(region: {
+  prefecture: string | null;
+  municipality: string | null;
+}): string | null {
+  if (!region.prefecture && !region.municipality) return null;
+  return [region.prefecture, region.municipality].filter(Boolean).join(" ");
+}
+
+/**
+ * 地域絞り込みの where 条件を組み立てる。
+ *
+ * 「データセット側の対象地域が優先、未設定なら組織の所在地」という規則を
+ * SQL で表現するため、各条件を
+ *   (1) データセットが自前の地域を持つ場合はそれで判定
+ *   (2) 持たない場合(prefecture IS NULL)は組織の所在地で判定
+ * の OR に展開する。市区町村の条件で (1) を `prefecture: { not: null }` と
+ * するのは、自前の地域を持つデータセットの市区町村だけを見て、
+ * 組織側の市区町村が紛れ込まないようにするため。
+ */
+function buildRegionWhere(
+  prefecture?: string,
+  municipality?: string,
+): Prisma.DatasetWhereInput[] {
+  const conditions: Prisma.DatasetWhereInput[] = [];
+
+  if (prefecture) {
+    conditions.push({
+      OR: [
+        { prefecture },
+        { prefecture: null, organization: { prefecture } },
+      ],
+    });
+  }
+
+  if (municipality) {
+    conditions.push({
+      OR: [
+        { prefecture: { not: null }, municipality },
+        { prefecture: null, organization: { municipality } },
+      ],
+    });
+  }
+
+  return conditions;
 }
 
 /**
@@ -219,6 +324,10 @@ export function buildCatalogWhere(
   if (tag) {
     and.push({ tags: { contains: tag } });
   }
+
+  and.push(
+    ...buildRegionWhere(filters.prefecture?.trim(), filters.municipality?.trim()),
+  );
 
   return { AND: and };
 }

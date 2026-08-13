@@ -43,6 +43,12 @@ type SeedDataset = {
   tags: string;
   updateFrequency: string;
   visibility: Visibility;
+  /**
+   * データが対象とする地域。未指定なら発行組織の所在地が使われる。
+   * 収録 4 件はいずれも鳥取県内の複数市町村にまたがるため、市区町村は指定しない。
+   */
+  prefecture?: string;
+  municipality?: string;
 };
 
 const DATASETS: SeedDataset[] = [
@@ -78,6 +84,9 @@ const DATASETS: SeedDataset[] = [
     tags: "店舗,POI,山陰,位置情報",
     updateFrequency: "月次",
     visibility: "PUBLIC",
+    // 発行元の所在地は米子市だが、データは鳥取県全域が対象。
+    // 対象地域を明示して、米子市のデータとして分類されるのを防ぐ。
+    prefecture: "鳥取県",
   },
   {
     orgKey: "lab",
@@ -89,6 +98,8 @@ const DATASETS: SeedDataset[] = [
     tags: "人流,統計,山陰,観光",
     updateFrequency: "日次",
     visibility: "PUBLIC",
+    // 鳥取市・米子市・倉吉市の地点を含むため、県単位を対象地域とする。
+    prefecture: "鳥取県",
   },
 ];
 
@@ -137,14 +148,22 @@ async function main() {
   // --- 組織 ----------------------------------------------------------------
   // デモの 2 組織は運営が確認済みの体で verified: true にする
   // (通常のサインアップ経由で作られる組織は常に未確認から始まる)。
+  // 所在地は、データセット側に対象地域が無いときのカタログ絞り込みに使われる。
   const govOrg = await prisma.organization.create({
-    data: { name: "鳥取県庁", type: "GOVERNMENT" as OrgType, verified: true },
+    data: {
+      name: "鳥取県庁",
+      type: "GOVERNMENT" as OrgType,
+      verified: true,
+      prefecture: "鳥取県",
+    },
   });
   const labOrg = await prisma.organization.create({
     data: {
       name: "山陰データラボ株式会社",
       type: "PRIVATE" as OrgType,
       verified: true,
+      prefecture: "鳥取県",
+      municipality: "米子市",
     },
   });
   const orgIdByKey: Record<"gov" | "lab", string> = {
@@ -194,6 +213,8 @@ async function main() {
         columnsJson: JSON.stringify(columns),
         rowCount,
         filePath: null,
+        prefecture: spec.prefecture ?? null,
+        municipality: spec.municipality ?? null,
         organizationId: orgIdByKey[spec.orgKey],
       },
     });

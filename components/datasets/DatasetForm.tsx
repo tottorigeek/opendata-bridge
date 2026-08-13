@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import RegionSelect from "@/components/RegionSelect";
 
 const LICENSE_PRESETS = [
   "CC-BY-4.0",
@@ -33,6 +34,8 @@ export interface DatasetFormInitial {
   updateFrequency: string;
   visibility: string;
   hasFile: boolean;
+  prefecture: string | null;
+  municipality: string | null;
 }
 
 const inputClass =
@@ -172,6 +175,22 @@ export default function DatasetForm({
             ))}
           </select>
         </div>
+      </div>
+
+      <div>
+        <label className={labelClass}>対象地域</label>
+        <p className="mb-2 text-xs text-slate-500">
+          このデータが対象とする地域です。未指定の場合は組織の所在地
+          (組織設定)がカタログの絞り込みに使われます。
+        </p>
+        <RegionSelect
+          prefectureName="prefecture"
+          municipalityName="municipality"
+          initialPrefecture={initial?.prefecture}
+          initialMunicipality={initial?.municipality}
+          selectClassName={inputClass}
+          labelClassName="mb-1 block text-xs font-medium text-slate-600"
+        />
       </div>
 
       <div>

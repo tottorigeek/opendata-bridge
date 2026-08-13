@@ -5,6 +5,7 @@ import {
   formatTags,
   parseTags,
   isVisibility,
+  parseRegionInput,
 } from "@/lib/datasets";
 import {
   extractCsvMeta,
@@ -35,6 +36,10 @@ export async function POST(request: Request) {
   const updateFrequency =
     String(form.get("updateFrequency") ?? "").trim() || "不定期";
   const visibility = String(form.get("visibility") ?? "PRIVATE");
+  const region = parseRegionInput(
+    form.get("prefecture"),
+    form.get("municipality"),
+  );
 
   if (!title) {
     return NextResponse.json({ error: "タイトルを入力してください。" }, { status: 400 });
@@ -89,6 +94,8 @@ export async function POST(request: Request) {
       columnsJson: JSON.stringify(columns),
       rowCount,
       filePath: null,
+      prefecture: region.prefecture,
+      municipality: region.municipality,
       organizationId: user.organizationId,
     },
   });

@@ -15,16 +15,22 @@ datasource db {
 }
 
 model Organization {
-  id   String  @id @default(cuid())
-  name String
-  type OrgType
+  id           String    @id @default(cuid())
+  name         String
+  type         OrgType
   /// 組織種別(特に GOVERNMENT)の裏付けが取れているか。
   /// 登録時は自己申告のため常に false。運営が確認して初めて true にする。
   /// カタログの「行政」バッジはこのフラグが true のときだけ正式表示する。
-  verified  Boolean   @default(false)
-  createdAt DateTime  @default(now())
-  users     User[]
-  datasets  Dataset[]
+  verified     Boolean   @default(false)
+  /// 組織の所在自治体(都道府県 / 市区町村)。lib/regions.ts のマスタ値を入れる。
+  /// データセット側に対象地域が未設定のとき、カタログ検索はここへフォールバックする。
+  prefecture   String?
+  municipality String?
+  createdAt    DateTime  @default(now())
+  users        User[]
+  datasets     Dataset[]
+
+  @@index([prefecture, municipality])
 }
 
 enum OrgType {
@@ -78,12 +84,20 @@ model Dataset {
   filePath        String? // storage/datasets/ 配下の相対パス
   columnsJson     String        @default("[]") // カラム名配列のJSON
   rowCount        Int           @default(0)
+  /// データが対象とする地域(都道府県 / 市区町村)。lib/regions.ts のマスタ値を入れる。
+  /// この 2 列は 1 組の「対象地域」として扱う。prefecture が null のときだけ
+  /// 発行組織の所在地へフォールバックし、prefecture だけ継承することはしない
+  /// (例: 対象地域が島根県のデータに、組織所在地の鳥取市が混ざるのを防ぐ)。
+  prefecture      String?
+  municipality    String?
   organizationId  String
   organization    Organization  @relation(fields: [organizationId], references: [id])
   /// 外部 API から取り込む場合の接続設定(sourceType = API のとき設定される)。
-  dataSource DataSource?
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
+  dataSource      DataSource?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([prefecture, municipality])
 }
 
 enum Visibility {
@@ -121,15 +135,15 @@ model DataSource {
   /// 取得先 URL。SSRF 対策のため、実行時に必ず lib/sources/fetch.ts の検証を通す。
   endpoint String
 
-  authType SourceAuthType @default(NONE)
+  authType      SourceAuthType @default(NONE)
   /// 認証値(APIキー等)を AES-256-GCM で暗号化したもの。平文では保存しない。
-  authValueEnc String @default("")
+  authValueEnc  String         @default("")
   /// authType = HEADER のときのヘッダ名 / QUERY のときのクエリパラメータ名。
-  authParamName String @default("")
+  authParamName String         @default("")
 
   /// REST_JSON のとき、レコード配列が入っている場所(例: "result.records")。
   /// 空ならレスポンス直下が配列であることを期待する。
-  recordsPath String @default("")
+  recordsPath  String @default("")
   /// 列マッピング [{ from, to }] の JSON。空配列なら取得側のキーをそのまま列名にする。
   fieldMapJson String @default("[]")
 
@@ -185,18 +199,18 @@ model SyncRun {
   rowCount     Int        @default(0)
   message      String     @default("")
   /// 手動実行か定期実行か。
-  triggeredBy String   @default("manual")
-  startedAt   DateTime @default(now())
-  durationMs  Int      @default(0)
+  triggeredBy  String     @default("manual")
+  startedAt    DateTime   @default(now())
+  durationMs   Int        @default(0)
 
   @@index([dataSourceId, startedAt])
 }
 
 model ApiKey {
-  id String @id @default(cuid())
+  id        String    @id @default(cuid())
   /// キー全文の SHA-256(hex)。平文は発行時のレスポンスでしか返さず、保存もしない。
   /// 認証はこのハッシュへの完全一致で行う。
-  keyHash String @unique
+  keyHash   String    @unique
   /// 一覧のマスク表示用に残す先頭 8 文字(例: "odb_A1b2")。秘密ではない。
   keyPrefix String
   label     String

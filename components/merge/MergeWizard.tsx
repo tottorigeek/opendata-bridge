@@ -16,22 +16,28 @@ export type MergeDatasetItem = {
   hasFile: boolean;
 };
 
-type JoinType = "inner" | "left" | "full";
 type OutputColumn = { source: "A" | "B"; column: string };
 
+// 型定義の正本は lib/merge/ 側にある。型のみの import はビルド時に消えるため、
+// サーバー用のロジックをクライアントバンドルに持ち込まずに共有できる。
+type MergeKind = import("@/lib/merge/engine").MergeKind;
+type KeyAnalysis = import("@/lib/merge/metrics").KeyAnalysis;
+type AffinityReport = import("@/lib/merge/affinity").AffinityReport;
+type KeyRecommendation = import("@/lib/merge/affinity").KeyRecommendation;
+
 type Stats = {
-  totalRowsA: number;
-  totalRowsB: number;
   outputRows: number;
-  matchedRowsA: number;
-  matchRate: number;
-  unmatchedSamples: {
-    side: "A" | "B";
-    key: string;
-    normalizedKey: string;
-    row: Record<string, string>;
-  }[];
+  analysis: KeyAnalysis;
 };
+
+type AffinityResponse =
+  | { mode: "report"; report: AffinityReport }
+  | {
+      mode: "recommend";
+      recommendations: KeyRecommendation[];
+      rowsA: number;
+      rowsB: number;
+    };
 
 type PreviewResponse = {
   columns: string[];
@@ -51,10 +57,28 @@ type ExecuteResponse = {
   stats: Stats;
 };
 
-const JOIN_OPTIONS: { value: JoinType; label: string; hint: string }[] = [
-  { value: "inner", label: "内部結合 (inner)", hint: "両方でマッチした行のみ" },
-  { value: "left", label: "左外部結合 (left)", hint: "A の全行 + マッチした B" },
-  { value: "full", label: "完全外部結合 (full)", hint: "A と B の全行" },
+/**
+ * マージ型の選択肢。正本は lib/merge/engine.ts の MERGE_KINDS。
+ * クライアントバンドルにサーバー用ロジックを持ち込まないよう、表示用の文言だけを持つ。
+ */
+const KIND_OPTIONS: {
+  value: MergeKind;
+  label: string;
+  question: string;
+  effect: string;
+}[] = [
+  {
+    value: "extend",
+    label: "項目拡張型",
+    question: "手元のデータに、別のデータの項目を足したい",
+    effect: "手元のデータの行はすべて残り、列(項目)が増えます。",
+  },
+  {
+    value: "intersect",
+    label: "共通抽出型",
+    question: "両方に存在するものだけを取り出したい",
+    effect: "両方にある行だけが残り、列(項目)が増えます。",
+  },
 ];
 
 function DatasetBadge({ ds }: { ds: MergeDatasetItem }) {
@@ -77,11 +101,13 @@ export default function MergeWizard({ datasets }: { datasets: MergeDatasetItem[]
   const [keyA, setKeyA] = useState("");
   const [keyB, setKeyB] = useState("");
   const [level, setLevel] = useState<NormalizationLevel>("address");
-  const [joinType, setJoinType] = useState<JoinType>("inner");
+  const [kind, setKind] = useState<MergeKind>("extend");
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
   const [executed, setExecuted] = useState<ExecuteResponse | null>(null);
+  const [affinity, setAffinity] = useState<AffinityResponse | null>(null);
+  const [affinityLoading, setAffinityLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -121,9 +147,48 @@ export default function MergeWizard({ datasets }: { datasets: MergeDatasetItem[]
       keyA,
       keyB,
       level,
-      joinType,
+      kind,
       outputColumns,
     };
+  }
+
+  /**
+   * 相性チェック。キー列を渡せばその設定の診断、渡さなければキー列の推薦。
+   * マージ結果を作らないため、何度実行しても副作用がない。
+   */
+  async function runAffinity(mode: "report" | "recommend") {
+    setAffinityLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/merge/affinity", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          datasetAId: aId,
+          datasetBId: bId,
+          kind,
+          ...(mode === "report" ? { keyA, keyB, level } : {}),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "相性チェックに失敗しました。");
+        return;
+      }
+      setAffinity(data as AffinityResponse);
+    } catch {
+      setError("通信に失敗しました。");
+    } finally {
+      setAffinityLoading(false);
+    }
+  }
+
+  /** 推薦されたキー列の組を、そのままフォームへ反映する。 */
+  function applyRecommendation(r: KeyRecommendation) {
+    setKeyA(r.keyA);
+    setKeyB(r.keyB);
+    setLevel(r.level);
+    setAffinity(null);
   }
 
   async function runPreview() {
@@ -279,29 +344,73 @@ export default function MergeWizard({ datasets }: { datasets: MergeDatasetItem[]
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700">結合タイプ</label>
-            <div className="mt-2 grid gap-2 sm:grid-cols-3">
-              {JOIN_OPTIONS.map((j) => (
+            <label className="block text-sm font-medium text-slate-700">マージ型</label>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              {KIND_OPTIONS.map((k) => (
                 <label
-                  key={j.value}
+                  key={k.value}
                   className={`cursor-pointer rounded-md border px-3 py-2 text-sm ${
-                    joinType === j.value
+                    kind === k.value
                       ? "border-sky-400 bg-sky-50 text-sky-800"
                       : "border-slate-300 text-slate-700"
                   }`}
                 >
                   <input
                     type="radio"
-                    name="joinType"
+                    name="kind"
                     className="mr-2"
-                    checked={joinType === j.value}
-                    onChange={() => setJoinType(j.value)}
+                    checked={kind === k.value}
+                    onChange={() => {
+                      setKind(k.value);
+                      setAffinity(null);
+                    }}
                   />
-                  {j.label}
-                  <span className="mt-0.5 block text-xs text-slate-500">{j.hint}</span>
+                  {k.label}
+                  <span className="mt-0.5 block text-xs text-slate-600">{k.question}</span>
+                  <span className="mt-0.5 block text-xs text-slate-500">{k.effect}</span>
                 </label>
               ))}
             </div>
+          </div>
+
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-medium text-slate-700">相性チェック</h3>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  マージせずに、この設定でどれだけ噛み合うかを確認できます。
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={affinityLoading}
+                  onClick={() => runAffinity("recommend")}
+                  className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                >
+                  キー列を提案
+                </button>
+                <button
+                  type="button"
+                  disabled={affinityLoading || !keyA || !keyB}
+                  onClick={() => runAffinity("report")}
+                  className="rounded-md bg-slate-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+                >
+                  {affinityLoading ? "確認中..." : "この設定で確認"}
+                </button>
+              </div>
+            </div>
+            {affinity && (
+              <div className="mt-4">
+                <AffinityPanel
+                  data={affinity}
+                  onApply={applyRecommendation}
+                  levelLabel={(v) =>
+                    NORMALIZATION_LEVELS.find((l) => l.value === v)?.label ?? v
+                  }
+                />
+              </div>
+            )}
           </div>
 
           <div>
@@ -390,8 +499,8 @@ export default function MergeWizard({ datasets }: { datasets: MergeDatasetItem[]
             <ResultTable columns={preview.columns} rows={preview.sampleRows} />
           </div>
 
-          {preview.stats.unmatchedSamples.length > 0 && (
-            <UnmatchedPanel samples={preview.stats.unmatchedSamples} />
+          {preview.stats.analysis.unmatchedSamples.length > 0 && (
+            <UnmatchedPanel samples={preview.stats.analysis.unmatchedSamples} />
           )}
 
           <div className="flex justify-between">
@@ -548,18 +657,129 @@ function ColumnSelect({
   );
 }
 
+const pct = (v: number) => `${(v * 100).toFixed(1)}%`;
+
 function StatsPanel({ stats, note }: { stats: Stats; note: string }) {
-  const pct = (stats.matchRate * 100).toFixed(1);
+  const { a, b } = stats.analysis;
   return (
     <div className="grid gap-3 sm:grid-cols-4">
-      <StatCard label="マッチ率" value={`${pct}%`} highlight />
-      <StatCard label="出力行数" value={String(stats.outputRows)} />
+      <StatCard label="カバー率 (A)" value={pct(a.coverage)} highlight />
+      <StatCard label="カバー率 (B)" value={pct(b.coverage)} />
+      <StatCard label="出力行数" value={a.totalRows > 0 ? String(stats.outputRows) : "0"} />
       <StatCard
-        label="マッチ行 (A基準)"
-        value={`${stats.matchedRowsA} / ${stats.totalRowsA}`}
+        label="マッチ行 (A / B)"
+        value={`${a.matchedRows} / ${b.matchedRows}`}
       />
-      <StatCard label="A / B 行数" value={`${stats.totalRowsA} / ${stats.totalRowsB}`} />
       <p className="col-span-full text-xs text-slate-500">{note}</p>
+    </div>
+  );
+}
+
+/** 相性チェックの結果表示(個別診断 / キー列の推薦)。 */
+function AffinityPanel({
+  data,
+  onApply,
+  levelLabel,
+}: {
+  data: AffinityResponse;
+  onApply: (r: KeyRecommendation) => void;
+  levelLabel: (v: string) => string;
+}) {
+  if (data.mode === "recommend") {
+    if (data.recommendations.length === 0) {
+      return (
+        <p className="text-xs text-slate-600">
+          結合できそうなキー列の組み合わせが見つかりませんでした。
+          共通する項目(住所・施設名・団体コードなど)があるか確認してください。
+        </p>
+      );
+    }
+    return (
+      <div>
+        <p className="text-xs text-slate-600">
+          先頭の行を試した結果、相性が良さそうな組み合わせです。選ぶと設定に反映します。
+        </p>
+        <ul className="mt-2 space-y-1.5">
+          {data.recommendations.map((r) => (
+            <li key={`${r.keyA}/${r.keyB}/${r.level}`}>
+              <button
+                type="button"
+                onClick={() => onApply(r)}
+                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-left text-xs hover:border-sky-300 hover:bg-sky-50"
+              >
+                <span className="font-medium text-slate-800">
+                  {r.keyA} ⇔ {r.keyB}
+                </span>
+                <span className="ml-2 text-slate-500">{levelLabel(r.level)}</span>
+                <span className="mt-0.5 block text-slate-500">
+                  重なり {pct(r.jaccard)} / カバー率 A {pct(r.coverageA)}・B {pct(r.coverageB)}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+
+  const { analysis, warnings, estimatedOutputRows } = data.report;
+  const severityClass: Record<string, string> = {
+    error: "border-red-200 bg-red-50 text-red-800",
+    warn: "border-amber-200 bg-amber-50 text-amber-800",
+    info: "border-sky-200 bg-sky-50 text-sky-800",
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="grid gap-2 sm:grid-cols-4">
+        <StatCard label="カバー率 (A)" value={pct(analysis.a.coverage)} highlight />
+        <StatCard label="カバー率 (B)" value={pct(analysis.b.coverage)} />
+        <StatCard label="重なり (Jaccard)" value={pct(analysis.jaccard)} />
+        <StatCard
+          label="推定出力行数"
+          value={estimatedOutputRows.toLocaleString("ja-JP")}
+        />
+      </div>
+
+      <dl className="grid gap-x-6 gap-y-1 text-xs text-slate-600 sm:grid-cols-2">
+        <div className="flex justify-between">
+          <dt>キーの識別力 (A / B)</dt>
+          <dd>
+            {pct(analysis.a.discrimination)} / {pct(analysis.b.discrimination)}
+          </dd>
+        </div>
+        <div className="flex justify-between">
+          <dt>1 行あたりの対応数(平均 / 最大)</dt>
+          <dd>
+            {analysis.multiplicity.mean.toFixed(1)} / {analysis.multiplicity.max}
+          </dd>
+        </div>
+        <div className="flex justify-between">
+          <dt>正規化の寄与</dt>
+          <dd>
+            {pct(analysis.exactCoverageA)} → {pct(analysis.a.coverage)}
+          </dd>
+        </div>
+        <div className="flex justify-between">
+          <dt>キー列が空の行 (A / B)</dt>
+          <dd>
+            {pct(analysis.a.emptyKeyRate)} / {pct(analysis.b.emptyKeyRate)}
+          </dd>
+        </div>
+      </dl>
+
+      {warnings.length > 0 && (
+        <ul className="space-y-1.5">
+          {warnings.map((w, i) => (
+            <li
+              key={i}
+              className={`rounded-md border px-3 py-2 text-xs ${severityClass[w.severity]}`}
+            >
+              {w.message}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
@@ -634,7 +854,7 @@ function ResultTable({
 function UnmatchedPanel({
   samples,
 }: {
-  samples: Stats["unmatchedSamples"];
+  samples: KeyAnalysis["unmatchedSamples"];
 }) {
   return (
     <div>

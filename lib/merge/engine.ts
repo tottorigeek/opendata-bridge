@@ -6,9 +6,61 @@
  * マッチ統計(マッチ率・アンマッチ例)を返す。純粋なデータ変換で副作用を持たない。
  */
 import type { CsvTable } from "./csv";
+import { analyzeKeys, type KeyAnalysis } from "./metrics";
 import { normalizeValue, type NormalizationLevel } from "./normalize";
 
+/**
+ * 低レベルの結合種別。
+ *
+ * 利用者に見せるのは MergeKind(項目拡張型 / 共通抽出型)であり、
+ * この型は API からは直接指定できない。"full" は完全外部結合の原始的な
+ * 実装として残しているが、マージ型からは到達しない
+ * (完全外部結合の用途は相性チェックの診断であり、そちらは行を組み立てずに
+ * lib/merge/metrics.ts で計算する。docs/design/merge-design.md §1-2)。
+ */
 export type JoinType = "inner" | "left" | "full";
+
+/**
+ * 利用者に見せるマージ型。「どの行が残るか」を名前で明言する 2 種。
+ * docs/design/merge-design.md §1-1 を参照。
+ */
+export type MergeKind = "extend" | "intersect";
+
+export const MERGE_KINDS: {
+  value: MergeKind;
+  label: string;
+  /** 利用者に示す問い。型の選択はこの文で行う。 */
+  question: string;
+  /** 行と列がどうなるかの説明。 */
+  effect: string;
+  joinType: JoinType;
+}[] = [
+  {
+    value: "extend",
+    label: "項目拡張型",
+    question: "手元のデータに、別のデータの項目を足したい",
+    effect: "手元のデータの行はすべて残り、列(項目)が増えます。",
+    joinType: "left",
+  },
+  {
+    value: "intersect",
+    label: "共通抽出型",
+    question: "両方に存在するものだけを取り出したい",
+    effect: "両方にある行だけが残り、列(項目)が増えます。",
+    joinType: "inner",
+  },
+];
+
+/** マージ型に対応する結合種別を返す。 */
+export function joinTypeForKind(kind: MergeKind): JoinType {
+  return kind === "extend" ? "left" : "inner";
+}
+
+/**
+ * マージ結果の最大行数。多対多結合による行数爆発を止める。
+ * 相性チェックの事前警告(lib/merge/affinity.ts)も同じ値を基準にする。
+ */
+export const DEFAULT_MAX_OUTPUT_ROWS = 500_000;
 
 /** 出力に含める 1 列の指定(どちらのデータセットのどの列か)。 */
 export type OutputColumn = { source: "A" | "B"; column: string };
@@ -46,24 +98,14 @@ export class MergeLimitExceededError extends Error {
   }
 }
 
-export type UnmatchedSample = {
-  side: "A" | "B";
-  key: string;
-  normalizedKey: string;
-  row: Record<string, string>;
-};
-
 export type MergeStats = {
-  totalRowsA: number;
-  totalRowsB: number;
   /** 出力行数(結合後)。 */
   outputRows: number;
-  /** 少なくとも 1 件マッチした A 行の数。 */
-  matchedRowsA: number;
-  /** マッチ率 = matchedRowsA / totalRowsA(0〜1)。 */
-  matchRate: number;
-  /** アンマッチ行の先頭 10 件(A 側・B 側)。 */
-  unmatchedSamples: UnmatchedSample[];
+  /**
+   * キー照合の指標一式。相性チェックと同じ計算(lib/merge/metrics.ts)から得るため、
+   * 事前診断で見た数値とマージ後に記録される数値が一致する。
+   */
+  analysis: KeyAnalysis;
 };
 
 export type MergeResult = {
@@ -150,8 +192,6 @@ export function mergeTables(a: CsvTable, b: CsvTable, config: MergeConfig): Merg
 
   const matchedBKeys = new Set<string>();
   const rows: Record<string, string>[] = [];
-  let matchedRowsA = 0;
-  const unmatchedSamples: UnmatchedSample[] = [];
 
   // 上限は「行を push する直前」に見る。全部組み立ててから切り詰めるのでは、
   // その時点で既にメモリを使い切っているため意味がない。
@@ -175,30 +215,18 @@ export function mergeTables(a: CsvTable, b: CsvTable, config: MergeConfig): Merg
     return out;
   };
 
-  const addUnmatched = (side: "A" | "B", key: string, nk: string, row: Record<string, string>) => {
-    if (unmatchedSamples.length < 10) {
-      unmatchedSamples.push({ side, key, normalizedKey: nk, row });
-    }
-  };
-
   // A 行を走査。
   for (const aRow of a.rows) {
-    const rawKey = aRow[config.keyA] ?? "";
-    const nk = normalizeValue(rawKey, config.level);
+    const nk = normalizeValue(aRow[config.keyA] ?? "", config.level);
     const matches = nk === "" ? undefined : bIndex.get(nk);
 
     if (matches && matches.length > 0) {
-      matchedRowsA += 1;
       matchedBKeys.add(nk);
       for (const bRow of matches) {
         pushRow(buildRow(aRow, bRow));
       }
-    } else {
-      // アンマッチ
-      addUnmatched("A", rawKey, nk, aRow);
-      if (config.joinType === "left" || config.joinType === "full") {
-        pushRow(buildRow(aRow, null));
-      }
+    } else if (config.joinType === "left" || config.joinType === "full") {
+      pushRow(buildRow(aRow, null));
     }
   }
 
@@ -208,24 +236,18 @@ export function mergeTables(a: CsvTable, b: CsvTable, config: MergeConfig): Merg
       const nk = normalizeValue(bRow[config.keyB] ?? "", config.level);
       if (nk === "" || !matchedBKeys.has(nk)) {
         pushRow(buildRow(null, bRow));
-        addUnmatched("B", bRow[config.keyB] ?? "", nk, bRow);
       }
     }
   }
-
-  const totalRowsA = a.rows.length;
-  const matchRate = totalRowsA > 0 ? matchedRowsA / totalRowsA : 0;
 
   return {
     columns,
     rows,
     stats: {
-      totalRowsA,
-      totalRowsB: b.rows.length,
       outputRows: rows.length,
-      matchedRowsA,
-      matchRate,
-      unmatchedSamples,
+      // 統計は相性チェックと同じ計算を通す。行の組み立てとは独立した走査になるが、
+      // 事前診断とマージ後の記録が一致することを優先する。
+      analysis: analyzeKeys(a, b, config.keyA, config.keyB, config.level),
     },
   };
 }

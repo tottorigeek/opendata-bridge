@@ -72,6 +72,7 @@ export async function PATCH(
     updateFrequency: string;
     prefecture: string | null;
     municipality: string | null;
+    licenseUnresolved: boolean;
     columnsJson?: string;
     rowCount?: number;
     filePath?: string;
@@ -84,6 +85,9 @@ export async function PATCH(
     updateFrequency,
     prefecture: region.prefecture,
     municipality: region.municipality,
+    // フォームはライセンスを必ず送るため、保存できた時点で人が値を確認したとみなし
+    // 未確定フラグを解除する(マージ結果の未確定状態はここで解消される)。
+    licenseUnresolved: false,
   };
 
   // CSV 差し替え(任意)

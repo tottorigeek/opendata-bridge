@@ -13,6 +13,8 @@ import { prisma } from "@/lib/prisma";
 import { parseFieldMap } from "@/lib/sources/transform";
 import CsvPreviewTable from "@/components/datasets/CsvPreviewTable";
 import DatasetDetailActions from "@/components/datasets/DatasetDetailActions";
+import LineagePanel from "@/components/datasets/LineagePanel";
+import { getLineage } from "@/lib/merge/lineage";
 import DataSourcePanel, {
   type SourceConfig,
   type SyncRunRow,
@@ -44,6 +46,9 @@ export default async function DatasetDetailPage({
     ? await readCsvPreview(dataset.id, 50)
     : { columns: [], rows: [], totalRows: 0 };
   const tags = parseTags(dataset.tags);
+  // マージ由来なら、どの出典から作られたかを併せて示す。
+  const lineage =
+    dataset.sourceType === "MERGED" ? await getLineage(dataset.id) : null;
 
   const source = await prisma.dataSource.findUnique({
     where: { datasetId: dataset.id },
@@ -131,7 +136,18 @@ export default async function DatasetDetailPage({
         </div>
         <div>
           <dt className="text-xs font-medium text-slate-500">ライセンス</dt>
-          <dd className="mt-0.5 text-sm text-slate-800">{dataset.license}</dd>
+          <dd className="mt-0.5 text-sm text-slate-800">
+            {dataset.licenseUnresolved || !dataset.license ? (
+              <span className="text-amber-700">
+                未確定
+                <span className="ml-1 text-xs">
+                  (設定するまで公開申請できません)
+                </span>
+              </span>
+            ) : (
+              dataset.license
+            )}
+          </dd>
         </div>
         <div>
           <dt className="text-xs font-medium text-slate-500">更新頻度</dt>
@@ -210,6 +226,12 @@ export default async function DatasetDetailPage({
           shown={preview.rows.length}
         />
       </div>
+
+      {lineage && (
+        <div className="mt-8">
+          <LineagePanel lineage={lineage} linkBase="/dashboard/datasets" />
+        </div>
+      )}
     </div>
   );
 }

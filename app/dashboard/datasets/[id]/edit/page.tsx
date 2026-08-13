@@ -49,6 +49,7 @@ export default async function EditDatasetPage({
             hasFile: !!dataset.filePath,
             prefecture: dataset.prefecture,
             municipality: dataset.municipality,
+            licenseUnresolved: dataset.licenseUnresolved,
           }}
         />
       </div>

@@ -2,9 +2,11 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import {
   getAccessibleDataset,
-  readDatasetTable,
+  readDatasetSource,
   buildMergedCsv,
 } from "@/lib/merge/datasets";
+import { resolveMergedLicense } from "@/lib/merge/license";
+import { recordMergeLineage } from "@/lib/merge/lineage";
 import {
   DEFAULT_MAX_OUTPUT_ROWS,
   MERGE_KINDS,
@@ -64,14 +66,19 @@ export async function POST(request: Request) {
     );
   }
 
-  let tableA;
-  let tableB;
+  let sourceA;
+  let sourceB;
   try {
-    [tableA, tableB] = await Promise.all([readDatasetTable(dsA), readDatasetTable(dsB)]);
+    [sourceA, sourceB] = await Promise.all([
+      readDatasetSource(dsA),
+      readDatasetSource(dsB),
+    ]);
   } catch (e) {
     const message = e instanceof Error ? e.message : "CSV の読み込みに失敗しました。";
     return NextResponse.json({ error: message }, { status: 422 });
   }
+  const tableA = sourceA.table;
+  const tableB = sourceB.table;
 
   if (!tableA.columns.includes(req.keyA) || !tableB.columns.includes(req.keyB)) {
     return NextResponse.json(
@@ -120,6 +127,10 @@ export async function POST(request: Request) {
 
   const title = `${dsA.title} × ${dsB.title}(マージ)`;
 
+  // ライセンスは入力から継承する。判定できない組み合わせは未確定のままにし、
+  // 公開申請の関門で人に確定させる(既定値を黙って入れない)。
+  const license = resolveMergedLicense(dsA.license, dsB.license);
+
   // 先に Dataset 行を作り、その id をキーに CSV を保存してから filePath を確定する
   // (アップロード経路と同じ「id ベースのストレージキー」に統一する)。
   const created = await prisma.dataset.create({
@@ -132,6 +143,8 @@ export async function POST(request: Request) {
       filePath: null,
       columnsJson: JSON.stringify(result.columns),
       rowCount,
+      license: license.license ?? "",
+      licenseUnresolved: license.license === null,
       organizationId: user.organizationId,
     },
   });
@@ -142,6 +155,21 @@ export async function POST(request: Request) {
     data: { filePath: datasetStorageKey(created.id) },
   });
 
+  // 来歴を構造化して保存する。説明文だけでは元データを辿れず、統計も比較できない。
+  await recordMergeLineage({
+    datasetId: created.id,
+    kind: req.kind,
+    keyA: req.keyA,
+    keyB: req.keyB,
+    level: req.level,
+    analysis: result.stats.analysis,
+    columnOrigins: result.columnOrigins,
+    inputs: [
+      { side: "A", dataset: dsA, contentHash: sourceA.contentHash },
+      { side: "B", dataset: dsB, contentHash: sourceB.contentHash },
+    ],
+  });
+
   return NextResponse.json({
     ok: true,
     datasetId: created.id,
@@ -149,5 +177,10 @@ export async function POST(request: Request) {
     description: created.description,
     rowCount,
     stats: result.stats,
+    license: {
+      value: license.license,
+      unresolved: license.license === null,
+      reason: license.reason,
+    },
   });
 }

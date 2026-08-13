@@ -90,14 +90,80 @@ model Dataset {
   /// (例: 対象地域が島根県のデータに、組織所在地の鳥取市が混ざるのを防ぐ)。
   prefecture      String?
   municipality    String?
+  /// ライセンスが確定していない状態。マージ結果で入力のライセンスから
+  /// 自動判定できなかったときに true になる。true の間は公開申請を通さない
+  /// (docs/design/merge-design.md §3-2)。
+  licenseUnresolved Boolean     @default(false)
   organizationId  String
   organization    Organization  @relation(fields: [organizationId], references: [id])
   /// 外部 API から取り込む場合の接続設定(sourceType = API のとき設定される)。
   dataSource      DataSource?
+  /// このデータセットがマージで生成された場合の来歴(sourceType = MERGED のとき)。
+  lineage         MergeLineage? @relation("MergeOutput")
+  /// このデータセットを入力として使ったマージの記録。
+  usedInMerges    MergeLineageInput[] @relation("MergeInput")
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
   @@index([prefecture, municipality])
+}
+
+/// マージ結果の来歴。生成された Dataset 1 件につき 1 行。
+///
+/// 説明文に日本語で書くのではなく構造化して保存するのは、
+///   - 元データセットを辿れるようにするため(多段のマージでも祖先を追える)
+///   - 統計を前回値と比較できるようにするため(自動追従の品質ゲートの基準)
+/// の 2 点による。詳細は docs/design/merge-design.md §3。
+model MergeLineage {
+  id        String  @id @default(cuid())
+  datasetId String  @unique
+  dataset   Dataset @relation("MergeOutput", fields: [datasetId], references: [id], onDelete: Cascade)
+
+  /// マージ型("extend" | "intersect")。
+  kind  String
+  keyA  String
+  keyB  String
+  /// 正規化レベル("address" 等)。
+  level String
+
+  /// キー照合の指標一式(lib/merge/metrics.ts の KeyAnalysis)の JSON。
+  /// 相性チェックと同じ計算から得た値で、品質の推移を追う基準になる。
+  statsJson String @default("{}")
+  /// 出力列 → 由来(どちらの入力のどの列か)の対応の JSON。
+  columnOriginsJson String @default("[]")
+
+  createdAt DateTime @default(now())
+
+  inputs MergeLineageInput[]
+}
+
+/// マージの入力 1 件分の記録。
+///
+/// 元データセットへの参照に加えて、マージ時点のタイトル・ライセンス・組織名・
+/// 内容ハッシュを写しておく。来歴は「その時点の事実の記録」であり、
+/// 元が削除・改名されても壊れてはならないため。
+model MergeLineageInput {
+  id        String       @id @default(cuid())
+  lineageId String
+  lineage   MergeLineage @relation(fields: [lineageId], references: [id], onDelete: Cascade)
+
+  /// どちら側の入力か("A" | "B")。
+  side String
+
+  /// 元データセット。削除されると null になるが、以下の写しは残る。
+  datasetId String?
+  dataset   Dataset? @relation("MergeInput", fields: [datasetId], references: [id], onDelete: SetNull)
+
+  /// マージ時点の値の写し。
+  title            String
+  license          String
+  organizationName String
+  rowCount         Int    @default(0)
+  /// マージ時点の CSV の SHA-256(hex)。出典が更新されたかを判定できる。
+  contentHash      String @default("")
+
+  @@index([lineageId])
+  @@index([datasetId])
 }
 
 enum Visibility {

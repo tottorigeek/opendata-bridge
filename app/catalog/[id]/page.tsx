@@ -12,6 +12,8 @@ import {
 } from "@/lib/datasets";
 import { readCsvPreview } from "@/lib/csv";
 import CsvPreviewTable from "@/components/datasets/CsvPreviewTable";
+import LineagePanel from "@/components/datasets/LineagePanel";
+import { getLineage } from "@/lib/merge/lineage";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +41,9 @@ export default async function CatalogDetailPage({
     ? await readCsvPreview(dataset.id, 50)
     : { columns: [], rows: [], totalRows: 0 };
   const tags = parseTags(dataset.tags);
+  // マージ由来のデータセットは、どの出典から作られたかを併せて示す。
+  const lineage =
+    dataset.sourceType === "MERGED" ? await getLineage(dataset.id) : null;
 
   return (
     <>
@@ -161,6 +166,12 @@ export default async function CatalogDetailPage({
               </dd>
             </div>
           </dl>
+
+          {lineage && (
+            <div className="mt-8">
+              <LineagePanel lineage={lineage} linkBase="/catalog" />
+            </div>
+          )}
 
           {/* プレビュー */}
           <div className="mt-8">

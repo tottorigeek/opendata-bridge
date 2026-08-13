@@ -31,6 +31,19 @@ export const VISIBILITY_LABEL: Record<string, string> = {
   PRIVATE: "非公開",
 };
 
+/** データの由来(手動アップロード / マージ結果 / 外部 API 取り込み)。 */
+export const SOURCE_TYPE_LABEL: Record<string, string> = {
+  UPLOADED: "アップロード",
+  MERGED: "マージ結果",
+  API: "API 取り込み",
+};
+
+export const SOURCE_TYPE_BADGE_CLASS: Record<string, string> = {
+  UPLOADED: "bg-slate-100 text-slate-600",
+  MERGED: "bg-indigo-100 text-indigo-700",
+  API: "bg-teal-100 text-teal-700",
+};
+
 export const ORG_TYPE_LABEL: Record<string, string> = {
   GOVERNMENT: "行政",
   PRIVATE: "民間",

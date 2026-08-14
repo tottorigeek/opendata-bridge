@@ -8,12 +8,8 @@ import {
   getOwnedDataset,
   parseRegionInput,
 } from "@/lib/datasets";
-import {
-  extractCsvMeta,
-  saveCsvFile,
-  deleteCsvFile,
-  datasetRelativePath,
-} from "@/lib/csv";
+import { extractCsvMeta, deleteCsvFile } from "@/lib/csv";
+import { createDatasetVersion } from "@/lib/versions";
 
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 
@@ -90,7 +86,8 @@ export async function PATCH(
     licenseUnresolved: false,
   };
 
-  // CSV 差し替え(任意)
+  // CSV 差し替え(任意)。差し替えたときは版が増える。
+  let newVersion: { number: number; unchanged: boolean } | null = null;
   const file = form.get("file");
   if (file && file instanceof File && file.size > 0) {
     if (file.size > MAX_UPLOAD_BYTES) {
@@ -106,22 +103,33 @@ export async function PATCH(
       );
     }
     const buffer = Buffer.from(await file.arrayBuffer());
+    let meta;
     try {
-      const meta = extractCsvMeta(buffer);
-      data.columnsJson = JSON.stringify(meta.columns);
-      data.rowCount = meta.rowCount;
+      meta = extractCsvMeta(buffer);
     } catch {
       return NextResponse.json(
         { error: "CSV の解析に失敗しました。" },
         { status: 400 },
       );
     }
-    await saveCsvFile(id, buffer);
-    data.filePath = datasetRelativePath(id);
+    // 差し替えは新しい版として記録する。filePath / columnsJson / rowCount の
+    // 更新は createDatasetVersion が行うため、ここでは data に積まない。
+    newVersion = await createDatasetVersion({
+      datasetId: id,
+      content: buffer,
+      columns: meta.columns,
+      rowCount: meta.rowCount,
+      source: "UPLOAD",
+      note: "CSV の差し替え",
+    });
   }
 
   await prisma.dataset.update({ where: { id }, data });
-  return NextResponse.json({ ok: true, id });
+  return NextResponse.json({
+    ok: true,
+    id,
+    ...(newVersion ? { version: newVersion.number, versionUnchanged: newVersion.unchanged } : {}),
+  });
 }
 
 /** データセット削除(ファイルも削除)。自組織のみ。 */

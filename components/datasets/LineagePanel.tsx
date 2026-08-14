@@ -69,7 +69,9 @@ export default function LineagePanel({
             </div>
             <p className="mt-1 text-xs text-slate-500">
               {input.organizationName}・ライセンス: {input.license || "未設定"}・
-              {input.rowCount.toLocaleString("ja-JP")} 行(マージ時点)
+              {input.rowCount.toLocaleString("ja-JP")} 行
+              {input.versionNumber !== null && `・第 ${input.versionNumber} 版`}
+              (マージ時点)
             </p>
           </li>
         ))}

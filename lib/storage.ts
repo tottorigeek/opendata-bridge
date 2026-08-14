@@ -27,9 +27,6 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-/** ローカルドライバの保存先ディレクトリ。 */
-const LOCAL_DIR = path.join(process.cwd(), "storage", "datasets");
-
 /** Supabase Storage のバケット名(未指定時は "datasets")。 */
 function bucketName(): string {
   return process.env.SUPABASE_STORAGE_BUCKET || "datasets";
@@ -55,9 +52,19 @@ function supabaseServiceKey(): string | undefined {
   return process.env.SUPABASE_SERVICE_ROLE_KEY || undefined;
 }
 
-/** データセット id からストレージキー(= DB の filePath / バケット内パス)を導出する。 */
+/**
+ * データセット id からストレージキー(= DB の filePath / バケット内パス)を導出する。
+ *
+ * 版を持つ前に作られたデータはこのキーのままなので、移行時にファイルを
+ * 移動しなくて済むよう、初版の filePath にはこの値をそのまま入れる。
+ */
 export function datasetStorageKey(id: string): string {
   return `datasets/${id}.csv`;
+}
+
+/** 版ごとのストレージキー。版を持つデータはすべてこの形式になる。 */
+export function datasetVersionStorageKey(datasetId: string, version: number): string {
+  return `datasets/${datasetId}/v${version}.csv`;
 }
 
 /**
@@ -69,9 +76,12 @@ export function isBlobStorageEnabled(): boolean {
   return !!(supabaseUrl() && supabaseServiceKey());
 }
 
-/** ローカルドライバでの絶対パス。 */
-function localPath(id: string): string {
-  return path.join(LOCAL_DIR, `${id}.csv`);
+/**
+ * ローカルドライバでの絶対パス。
+ * キーは "datasets/..." 形式なので、storage/ 直下に同じ階層で配置する。
+ */
+function localPathForKey(key: string): string {
+  return path.join(process.cwd(), "storage", key);
 }
 
 /**
@@ -95,66 +105,81 @@ async function getSupabase(): Promise<SupabaseClient> {
  * Buffer / 文字列いずれも受け付け、そのままのバイト列で保存する
  * (エンコーディング正規化は呼び出し側 lib/csv.ts の責務)。
  */
-export async function saveDatasetCsv(
-  id: string,
+export async function saveCsvObject(
+  key: string,
   content: Buffer | string,
 ): Promise<void> {
   const body = typeof content === "string" ? Buffer.from(content, "utf-8") : content;
 
   if (isBlobStorageEnabled()) {
     const supabase = await getSupabase();
-    const { error } = await supabase.storage
-      .from(bucketName())
-      .upload(datasetStorageKey(id), body, {
-        upsert: true, // CSV 差し替え時に同一キーへ上書き
-        contentType: "text/csv; charset=utf-8",
-      });
+    const { error } = await supabase.storage.from(bucketName()).upload(key, body, {
+      upsert: true, // 同一キーへの再保存(差し替え)を許す
+      contentType: "text/csv; charset=utf-8",
+    });
     if (error) {
       throw new Error(`Supabase Storage への保存に失敗しました: ${error.message}`);
     }
     return;
   }
 
-  await fs.mkdir(LOCAL_DIR, { recursive: true });
-  await fs.writeFile(localPath(id), body);
+  const absolute = localPathForKey(key);
+  await fs.mkdir(path.dirname(absolute), { recursive: true });
+  await fs.writeFile(absolute, body);
+}
+
+/** データセット id をキーにした保存(版を持たない経路の互換用)。 */
+export async function saveDatasetCsv(
+  id: string,
+  content: Buffer | string,
+): Promise<void> {
+  return saveCsvObject(datasetStorageKey(id), content);
 }
 
 /**
  * 保存済み CSV の生バイト列を返す。存在しなければ null。
  * (呼び出し側は従来どおり「未存在 = null」で分岐する。)
  */
-export async function readDatasetCsv(id: string): Promise<Buffer | null> {
+export async function readCsvObject(key: string): Promise<Buffer | null> {
   if (isBlobStorageEnabled()) {
     const supabase = await getSupabase();
-    const { data, error } = await supabase.storage
-      .from(bucketName())
-      .download(datasetStorageKey(id));
+    const { data, error } = await supabase.storage.from(bucketName()).download(key);
     if (error || !data) return null;
     const arrayBuffer = await data.arrayBuffer();
     return Buffer.from(arrayBuffer);
   }
 
   try {
-    return await fs.readFile(localPath(id));
+    return await fs.readFile(localPathForKey(key));
   } catch {
     return null;
   }
 }
 
+/** データセット id をキーにした読み出し(版を持たない経路の互換用)。 */
+export async function readDatasetCsv(id: string): Promise<Buffer | null> {
+  return readCsvObject(datasetStorageKey(id));
+}
+
 /** CSV を削除する(存在しなくてもエラーにしない)。 */
-export async function deleteDatasetCsv(id: string): Promise<void> {
+export async function deleteCsvObject(key: string): Promise<void> {
   if (isBlobStorageEnabled()) {
     const supabase = await getSupabase();
     // remove は対象が無くてもエラーにならない(空配列が返るのみ)。
-    await supabase.storage.from(bucketName()).remove([datasetStorageKey(id)]);
+    await supabase.storage.from(bucketName()).remove([key]);
     return;
   }
 
   try {
-    await fs.unlink(localPath(id));
+    await fs.unlink(localPathForKey(key));
   } catch {
     // ファイルが無ければ何もしない
   }
+}
+
+/** データセット id をキーにした削除(版を持たない経路の互換用)。 */
+export async function deleteDatasetCsv(id: string): Promise<void> {
+  return deleteCsvObject(datasetStorageKey(id));
 }
 
 /** CSV が存在するか。 */
@@ -171,7 +196,7 @@ export async function datasetCsvExists(id: string): Promise<boolean> {
   }
 
   try {
-    await fs.access(localPath(id));
+    await fs.access(localPathForKey(datasetStorageKey(id)));
     return true;
   } catch {
     return false;

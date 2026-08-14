@@ -7,7 +7,7 @@ import { createHash } from "node:crypto";
 import type { Dataset, Organization } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { SessionUser } from "@/lib/auth";
-import { readDatasetCsv } from "@/lib/storage";
+import { readCsvObject } from "@/lib/storage";
 import { parseCsv, toCsv, type CsvTable } from "./csv";
 
 /**
@@ -61,7 +61,8 @@ export async function readDatasetSource(
   if (!dataset.filePath) {
     throw new Error(`データセット「${dataset.title}」に CSV ファイルが紐付いていません。`);
   }
-  const buffer = await readDatasetCsv(dataset.id);
+  // 版ごとにキーが異なるため、DB に記録された filePath をそのまま使う。
+  const buffer = await readCsvObject(dataset.filePath);
   if (!buffer) {
     throw new Error(`データセット「${dataset.title}」の CSV が見つかりません。`);
   }

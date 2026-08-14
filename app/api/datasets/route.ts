@@ -7,11 +7,8 @@ import {
   isVisibility,
   parseRegionInput,
 } from "@/lib/datasets";
-import {
-  extractCsvMeta,
-  saveCsvFile,
-  datasetRelativePath,
-} from "@/lib/csv";
+import { extractCsvMeta } from "@/lib/csv";
+import { createDatasetVersion } from "@/lib/versions";
 
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024; // 20MB
 
@@ -101,10 +98,14 @@ export async function POST(request: Request) {
   });
 
   if (buffer) {
-    await saveCsvFile(dataset.id, buffer);
-    await prisma.dataset.update({
-      where: { id: dataset.id },
-      data: { filePath: datasetRelativePath(dataset.id) },
+    // CSV を伴う登録は、その内容を第 1 版として記録する。
+    await createDatasetVersion({
+      datasetId: dataset.id,
+      content: buffer,
+      columns,
+      rowCount,
+      source: "UPLOAD",
+      note: "新規登録",
     });
   }
 

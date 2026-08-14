@@ -256,6 +256,9 @@ model Dataset {
   usedInMerges    MergeLineageInput[] @relation("MergeInput")
   /// このデータセットに対する修正リクエスト。
   requests        DataRequest[]
+  /// 版の履歴。filePath / columnsJson / rowCount は最新版の値を写したもので、
+  /// 正本は DatasetVersion 側にある。
+  versions        DatasetVersion[]
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
@@ -315,6 +318,9 @@ model MergeLineageInput {
   rowCount         Int    @default(0)
   /// マージ時点の CSV の SHA-256(hex)。出典が更新されたかを判定できる。
   contentHash      String @default("")
+  /// マージに使った版の番号。版の導入前に作られた来歴では null。
+  /// ピン留め(実装順序 6)はこの番号を参照する。
+  versionNumber    Int?
 
   @@index([lineageId])
   @@index([datasetId])
@@ -452,4 +458,48 @@ model RateLimit {
 
   @@unique([bucket, windowStart])
   @@index([windowStart])
+}
+
+/// どの操作で作られた版か。
+enum VersionSource {
+  /// 画面からの CSV アップロード。
+  UPLOAD
+  /// 外部データソースからの取り込み。
+  SYNC
+  /// マージ結果として生成。
+  MERGE
+}
+
+/// データセットの版。
+///
+/// 版を持つ前のデータも移行で初版が作られる。初版の filePath は移行前の
+/// キー(datasets/{id}.csv)をそのまま指すため、移行でファイルを動かす必要はない。
+///
+/// Dataset 側の filePath / columnsJson / rowCount は最新版の値を写したもの。
+/// 読み取り経路を全面的に書き換えずに版を導入するための非正規化で、
+/// 版を作る唯一の経路(lib/versions.ts)が両方を同時に更新する。
+model DatasetVersion {
+  id        String  @id @default(cuid())
+  datasetId String
+  dataset   Dataset @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+
+  /// 登録順の連番(第 1 版, 第 2 版, ...)。データセット内で一意。
+  /// 日付を識別子にすると同日の複数更新で衝突し、「データの基準日」とも
+  /// 混同されるため、識別子は連番にして日付は表示に添えるだけにする。
+  number Int
+
+  /// この版の CSV のストレージキー。
+  filePath    String
+  columnsJson String @default("[]")
+  rowCount    Int    @default(0)
+  /// CSV の SHA-256(hex)。同一内容の再登録の検出に使う。
+  contentHash String @default("")
+
+  source    VersionSource @default(UPLOAD)
+  /// 版が作られた経緯の短い説明(例: 外部同期、マージ結果)。
+  note      String        @default("")
+  createdAt DateTime      @default(now())
+
+  @@unique([datasetId, number])
+  @@index([datasetId, createdAt])
 }

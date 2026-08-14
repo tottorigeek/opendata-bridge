@@ -16,7 +16,7 @@ import {
 import { parseMergeRequest } from "@/lib/merge/request";
 import { prisma } from "@/lib/prisma";
 import { RATE_LIMITS, consumeRateLimit } from "@/lib/rate-limit";
-import { saveDatasetCsv, datasetStorageKey } from "@/lib/storage";
+import { createDatasetVersion, latestVersion } from "@/lib/versions";
 
 /** 入力 1 データセットあたりの最大行数。 */
 const MAX_INPUT_ROWS = 200_000;
@@ -149,11 +149,21 @@ export async function POST(request: Request) {
     },
   });
 
-  await saveDatasetCsv(created.id, buildMergedCsv(result.columns, result.rows));
-  await prisma.dataset.update({
-    where: { id: created.id },
-    data: { filePath: datasetStorageKey(created.id) },
+  // マージ結果も版として記録する。再マージすれば版が増える。
+  await createDatasetVersion({
+    datasetId: created.id,
+    content: buildMergedCsv(result.columns, result.rows),
+    columns: result.columns,
+    rowCount,
+    source: "MERGE",
+    note: `${dsA.title} × ${dsB.title} のマージ結果`,
   });
+
+  // どの版を使ったかを来歴に残す。ピン留め(実装順序 6)はこの番号を参照する。
+  const [versionA, versionB] = await Promise.all([
+    latestVersion(dsA.id),
+    latestVersion(dsB.id),
+  ]);
 
   // 来歴を構造化して保存する。説明文だけでは元データを辿れず、統計も比較できない。
   await recordMergeLineage({
@@ -165,8 +175,18 @@ export async function POST(request: Request) {
     analysis: result.stats.analysis,
     columnOrigins: result.columnOrigins,
     inputs: [
-      { side: "A", dataset: dsA, contentHash: sourceA.contentHash },
-      { side: "B", dataset: dsB, contentHash: sourceB.contentHash },
+      {
+        side: "A",
+        dataset: dsA,
+        contentHash: sourceA.contentHash,
+        versionNumber: versionA?.number ?? null,
+      },
+      {
+        side: "B",
+        dataset: dsB,
+        contentHash: sourceB.contentHash,
+        versionNumber: versionB?.number ?? null,
+      },
     ],
   });
 

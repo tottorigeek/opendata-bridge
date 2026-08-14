@@ -3,8 +3,7 @@ import { stringify } from "csv-stringify/sync";
 import type { DataSource } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { decryptSecret } from "@/lib/crypto";
-import { datasetRelativePath } from "@/lib/csv";
-import { saveDatasetCsv } from "@/lib/storage";
+import { createDatasetVersion } from "@/lib/versions";
 import { SourceFetchError, safeFetch } from "./fetch";
 import {
   SourceTransformError,
@@ -104,24 +103,25 @@ export async function syncDataSource(
       );
     }
 
-    // アップロード経路と同じキーで保存する(datasets/{datasetId}.csv)。
+    // 取り込みごとに版を作る。内容が前回と同じなら版は増えない
+    // (定期同期のたびに版が積み上がるのを避けるため)。
     const csv = stringify([table.columns, ...table.rows]);
-    await saveDatasetCsv(source.datasetId, csv);
-
-    await prisma.dataset.update({
-      where: { id: source.datasetId },
-      data: {
-        filePath: datasetRelativePath(source.datasetId),
-        columnsJson: JSON.stringify(table.columns),
-        rowCount: table.rows.length,
-      },
+    const version = await createDatasetVersion({
+      datasetId: source.datasetId,
+      content: csv,
+      columns: table.columns,
+      rowCount: table.rows.length,
+      source: "SYNC",
+      note: "外部データソースからの取り込み",
     });
 
     outcome = {
       ok: true,
       rowCount: table.rows.length,
       columns: table.columns,
-      message: `${table.rows.length.toLocaleString()} 行を取り込みました。`,
+      message: version.unchanged
+        ? `${table.rows.length.toLocaleString()} 行を取得しましたが、内容に変化がないため版は増えていません。`
+        : `${table.rows.length.toLocaleString()} 行を取り込み、第 ${version.number} 版を作成しました。`,
       durationMs: Date.now() - started,
     };
   } catch (e) {

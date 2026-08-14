@@ -15,6 +15,8 @@ import CsvPreviewTable from "@/components/datasets/CsvPreviewTable";
 import DatasetDetailActions from "@/components/datasets/DatasetDetailActions";
 import LineagePanel from "@/components/datasets/LineagePanel";
 import { getLineage } from "@/lib/merge/lineage";
+import VersionHistory from "@/components/datasets/VersionHistory";
+import { listVersions } from "@/lib/versions";
 import DataSourcePanel, {
   type SourceConfig,
   type SyncRunRow,
@@ -49,6 +51,7 @@ export default async function DatasetDetailPage({
   // マージ由来なら、どの出典から作られたかを併せて示す。
   const lineage =
     dataset.sourceType === "MERGED" ? await getLineage(dataset.id) : null;
+  const versions = await listVersions(dataset.id);
 
   const source = await prisma.dataSource.findUnique({
     where: { datasetId: dataset.id },
@@ -226,6 +229,12 @@ export default async function DatasetDetailPage({
           shown={preview.rows.length}
         />
       </div>
+
+      {versions.length > 0 && (
+        <div className="mt-8">
+          <VersionHistory datasetId={dataset.id} versions={versions} />
+        </div>
+      )}
 
       {lineage && (
         <div className="mt-8">

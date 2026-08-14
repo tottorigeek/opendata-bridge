@@ -1,11 +1,12 @@
 import "server-only";
 import { parse } from "csv-parse/sync";
 import { stringify } from "csv-stringify/sync";
+import { prisma } from "@/lib/prisma";
 import {
   saveDatasetCsv,
-  readDatasetCsv,
-  deleteDatasetCsv,
+  readCsvObject,
   datasetStorageKey,
+  deleteDatasetCsv,
 } from "./storage";
 
 /**
@@ -113,6 +114,25 @@ export interface CsvPreview {
 }
 
 /**
+ * データセットの「現在の CSV」を読む。
+ *
+ * 版の導入により、実体のキーはデータセット id から一意に決まらなくなった
+ * (最新版は datasets/{id}/v{n}.csv、版の導入前に作られたものは datasets/{id}.csv)。
+ * したがって DB に記録された filePath を必ず見る。id からキーを組み立てると
+ * 差し替え後の版が読めない。
+ */
+export async function readCurrentDatasetCsv(
+  datasetId: string,
+): Promise<Buffer | null> {
+  const dataset = await prisma.dataset.findUnique({
+    where: { id: datasetId },
+    select: { filePath: true },
+  });
+  const key = dataset?.filePath ?? datasetStorageKey(datasetId);
+  return readCsvObject(key);
+}
+
+/**
  * 保存済み CSV ファイルの先頭 N 行(既定 50)を読み出してプレビュー用に返す。
  * ファイルが存在しない場合は空プレビューを返す。
  */
@@ -120,7 +140,7 @@ export async function readCsvPreview(
   datasetId: string,
   limit = 50,
 ): Promise<CsvPreview> {
-  const buffer = await readDatasetCsv(datasetId);
+  const buffer = await readCurrentDatasetCsv(datasetId);
   if (!buffer) {
     return { columns: [], rows: [], totalRows: 0 };
   }
@@ -143,7 +163,7 @@ export async function readCsvPreview(
  * 配信前に数式インジェクション対策を通すため、一度パースして組み立て直す。
  */
 export async function readCsvForDownload(datasetId: string): Promise<Buffer | null> {
-  const buffer = await readDatasetCsv(datasetId);
+  const buffer = await readCurrentDatasetCsv(datasetId);
   if (!buffer) return null;
   // 元が Shift_JIS でも UTF-8 に正規化して配信する(BOM 付き UTF-8)
   const text = decodeCsvBuffer(buffer);

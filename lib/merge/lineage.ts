@@ -20,6 +20,8 @@ export interface LineageInputRecord {
   side: "A" | "B";
   dataset: Dataset & { organization: Organization };
   contentHash: string;
+  /** マージに使った版の番号。版を持たないデータでは null。 */
+  versionNumber: number | null;
 }
 
 export interface RecordLineageParams {
@@ -60,6 +62,7 @@ export async function recordMergeLineage(params: RecordLineageParams) {
           organizationName: input.dataset.organization.name,
           rowCount: input.dataset.rowCount,
           contentHash: input.contentHash,
+          versionNumber: input.versionNumber,
         })),
       },
     },
@@ -75,6 +78,8 @@ export interface LineageInputView {
   organizationName: string;
   rowCount: number;
   contentHash: string;
+  /** マージに使った版の番号。版の導入前の来歴では null。 */
+  versionNumber: number | null;
   /** 元データセットが今も存在するか。false なら写しのみで辿れない。 */
   available: boolean;
   /**
@@ -136,6 +141,7 @@ export async function getLineage(datasetId: string): Promise<LineageView | null>
       organizationName: input.organizationName,
       rowCount: input.rowCount,
       contentHash: input.contentHash,
+      versionNumber: input.versionNumber,
       available: input.datasetId !== null,
       changed: null,
     })),

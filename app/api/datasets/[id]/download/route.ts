@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { readCsvForDownload } from "@/lib/csv";
+import { readVersionCsv } from "@/lib/versions";
 
 /**
  * CSV ダウンロード。
@@ -8,7 +9,7 @@ import { readCsvForDownload } from "@/lib/csv";
  * - それ以外は同一組織のログインユーザーのみ(下書き・ORG_ONLY 含む)
  */
 export async function GET(
-  _request: Request,
+  request: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
   const { id } = await ctx.params;
@@ -32,7 +33,16 @@ export async function GET(
     });
   }
 
-  const buffer = await readCsvForDownload(id);
+  // ?version=N で過去の版を取得できる。省略時は最新版(Dataset の写し)。
+  const requested = new URL(request.url).searchParams.get("version");
+  const versionNumber = requested ? Number.parseInt(requested, 10) : null;
+  if (requested !== null && (!Number.isInteger(versionNumber) || versionNumber! < 1)) {
+    return new Response("版の指定が不正です。", { status: 400 });
+  }
+
+  const buffer = versionNumber
+    ? await readVersionCsv(id, versionNumber)
+    : await readCsvForDownload(id);
   if (!buffer) {
     return new Response("ファイルが見つかりません。", { status: 404 });
   }
@@ -41,13 +51,14 @@ export async function GET(
   const safeAscii =
     dataset.title.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "_").trim() ||
     "dataset";
-  const encoded = encodeURIComponent(`${dataset.title}.csv`);
+  const suffix = versionNumber ? `_v${versionNumber}` : "";
+  const encoded = encodeURIComponent(`${dataset.title}${suffix}.csv`);
 
   return new Response(new Uint8Array(buffer), {
     status: 200,
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="${safeAscii}.csv"; filename*=UTF-8''${encoded}`,
+      "Content-Disposition": `attachment; filename="${safeAscii}${suffix}.csv"; filename*=UTF-8''${encoded}`,
       "Cache-Control": "no-store",
     },
   });

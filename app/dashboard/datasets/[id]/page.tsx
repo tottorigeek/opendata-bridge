@@ -15,6 +15,8 @@ import CsvPreviewTable from "@/components/datasets/CsvPreviewTable";
 import DatasetDetailActions from "@/components/datasets/DatasetDetailActions";
 import LineagePanel from "@/components/datasets/LineagePanel";
 import { getLineage } from "@/lib/merge/lineage";
+import { checkStaleness } from "@/lib/merge/refresh";
+import RefreshPanel from "@/components/datasets/RefreshPanel";
 import VersionHistory from "@/components/datasets/VersionHistory";
 import { listVersions } from "@/lib/versions";
 import DataSourcePanel, {
@@ -52,6 +54,14 @@ export default async function DatasetDetailPage({
   const lineage =
     dataset.sourceType === "MERGED" ? await getLineage(dataset.id) : null;
   const versions = await listVersions(dataset.id);
+  // マージ由来なら、出典が更新されていないかも確認する。
+  const staleness = lineage ? await checkStaleness(dataset.id) : null;
+  const lineageRow = lineage
+    ? await prisma.mergeLineage.findUnique({
+        where: { datasetId: dataset.id },
+        select: { lastRefreshMessage: true },
+      })
+    : null;
 
   const source = await prisma.dataSource.findUnique({
     where: { datasetId: dataset.id },
@@ -233,6 +243,23 @@ export default async function DatasetDetailPage({
       {versions.length > 0 && (
         <div className="mt-8">
           <VersionHistory datasetId={dataset.id} versions={versions} />
+        </div>
+      )}
+
+      {lineage && staleness && (
+        <div className="mt-8">
+          <RefreshPanel
+            datasetId={dataset.id}
+            stale={staleness.stale}
+            followLatest={staleness.followLatest}
+            inputs={staleness.inputs.map((i) => ({
+              side: i.side,
+              title: i.title,
+              usedVersion: i.usedVersion,
+              currentVersion: i.currentVersion,
+            }))}
+            lastMessage={lineageRow?.lastRefreshMessage ?? ""}
+          />
         </div>
       )}
 

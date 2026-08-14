@@ -84,7 +84,13 @@ export default async function CatalogDetailPage({
             {dataset.title}
           </h1>
           <p className="mt-1 text-sm text-slate-500">
-            提供組織: {dataset.organization.name}
+            提供組織:{" "}
+            <Link
+              href={`/organizations/${dataset.organization.id}`}
+              className="font-medium text-sky-700 hover:underline"
+            >
+              {dataset.organization.name}
+            </Link>
           </p>
           {dataset.description && (
             <p className="mt-4 max-w-3xl whitespace-pre-wrap text-slate-700">

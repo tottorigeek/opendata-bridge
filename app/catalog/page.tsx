@@ -1,16 +1,10 @@
 import Link from "next/link";
 import SiteHeader from "@/components/SiteHeader";
 import RegionFilter from "@/components/catalog/RegionFilter";
+import DatasetCard from "@/components/datasets/DatasetCard";
 import { getCurrentUser } from "@/lib/auth";
-import {
-  listCatalogDatasets,
-  collectCatalogTags,
-  parseTags,
-  orgTypeBadge,
-  effectiveRegion,
-  formatRegion,
-  VISIBILITY_LABEL,
-} from "@/lib/datasets";
+import { listCatalogDatasets, collectCatalogTags } from "@/lib/datasets";
+import { getOrganization } from "@/lib/organizations";
 import {
   PREFECTURES,
   allPrefectureGroups,
@@ -21,14 +15,6 @@ import {
 
 export const dynamic = "force-dynamic";
 
-function formatDate(d: Date): string {
-  return new Intl.DateTimeFormat("ja-JP", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(d);
-}
-
 export default async function CatalogPage({
   searchParams,
 }: {
@@ -38,6 +24,7 @@ export default async function CatalogPage({
     tag?: string;
     pref?: string;
     city?: string;
+    org?: string;
   }>;
 }) {
   const user = await getCurrentUser();
@@ -64,6 +51,10 @@ export default async function CatalogPage({
     ? [{ pref: prefecture, names: municipalitiesOf(prefecture) }]
     : allPrefectureGroups();
 
+  // 組織での絞り込み。存在しない ID は未指定として扱う。
+  const orgId = sp.org?.trim() || "";
+  const organization = orgId ? await getOrganization(orgId) : null;
+
   const [datasets, allTags] = await Promise.all([
     listCatalogDatasets(user, {
       keyword,
@@ -71,6 +62,7 @@ export default async function CatalogPage({
       tag: tag || undefined,
       prefecture: prefecture || undefined,
       municipality: municipality || undefined,
+      organizationId: organization?.id,
     }),
     collectCatalogTags(user),
   ]);
@@ -88,6 +80,26 @@ export default async function CatalogPage({
             行政・民間が公開したオープンデータを横断的に検索・閲覧できます。
             {!user && "（ログインすると所属組織限定の公開データも表示されます。）"}
           </p>
+
+          {organization && (
+            <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm">
+              <span className="text-sky-900">
+                <Link
+                  href={`/organizations/${organization.id}`}
+                  className="font-semibold hover:underline"
+                >
+                  {organization.name}
+                </Link>
+                {" のデータに絞り込んでいます。"}
+              </span>
+              <Link
+                href="/catalog"
+                className="text-xs font-medium text-sky-700 hover:underline"
+              >
+                絞り込みを解除
+              </Link>
+            </div>
+          )}
 
           {/* 検索・フィルタ(GET フォーム) */}
           <form
@@ -124,6 +136,9 @@ export default async function CatalogPage({
               labelClassName="mb-1 block text-xs font-medium text-slate-600"
             />
             {tag && <input type="hidden" name="tag" value={tag} />}
+            {organization && (
+              <input type="hidden" name="org" value={organization.id} />
+            )}
             <div className="flex gap-2">
               <button
                 type="submit"
@@ -131,7 +146,7 @@ export default async function CatalogPage({
               >
                 検索
               </button>
-              {(keyword || orgType || tag || prefecture || municipality) && (
+              {(keyword || orgType || tag || prefecture || municipality || organization) && (
                 <Link
                   href="/catalog"
                   className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
@@ -153,6 +168,7 @@ export default async function CatalogPage({
                 if (orgType) qs.set("type", orgType);
                 if (prefecture) qs.set("pref", prefecture);
                 if (municipality) qs.set("city", municipality);
+                if (organization) qs.set("org", organization.id);
                 if (!active) qs.set("tag", t);
                 const href = `/catalog${qs.toString() ? `?${qs}` : ""}`;
                 return (
@@ -188,64 +204,9 @@ export default async function CatalogPage({
             </div>
           ) : (
             <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {datasets.map((d) => {
-                const tags = parseTags(d.tags);
-                const region = formatRegion(effectiveRegion(d));
-                return (
-                  <Link
-                    key={d.id}
-                    href={`/catalog/${d.id}`}
-                    className="flex flex-col rounded-xl border border-slate-200 bg-white p-5 transition hover:border-sky-300 hover:shadow-sm"
-                  >
-                    <div className="flex items-center gap-2">
-                      {(() => {
-                        const badge = orgTypeBadge(
-                          d.organization.type,
-                          d.organization.verified,
-                        );
-                        return (
-                          <span
-                            title={badge.title}
-                            className={`rounded-full px-2 py-0.5 text-xs font-medium ${badge.className}`}
-                          >
-                            {badge.label}
-                          </span>
-                        );
-                      })()}
-                      {d.visibility === "ORG_ONLY" && (
-                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
-                          {VISIBILITY_LABEL[d.visibility]}
-                        </span>
-                      )}
-                    </div>
-                    <h2 className="mt-2 font-semibold text-slate-900">{d.title}</h2>
-                    <p className="mt-1 line-clamp-2 flex-1 text-sm text-slate-600">
-                      {d.description || "（説明なし）"}
-                    </p>
-                    <div className="mt-3 flex flex-wrap gap-1">
-                      {region && (
-                        <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
-                          {region}
-                        </span>
-                      )}
-                      {tags.slice(0, 3).map((t) => (
-                        <span
-                          key={t}
-                          className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500"
-                        >
-                          {t}
-                        </span>
-                      ))}
-                    </div>
-                    <div className="mt-3 flex items-center justify-between text-xs text-slate-400">
-                      <span>{d.organization.name}</span>
-                      <span>
-                        {d.rowCount.toLocaleString("ja-JP")} 行 · {formatDate(d.updatedAt)}
-                      </span>
-                    </div>
-                  </Link>
-                );
-              })}
+              {datasets.map((d) => (
+                <DatasetCard key={d.id} dataset={d} />
+              ))}
             </div>
           )}
         </div>

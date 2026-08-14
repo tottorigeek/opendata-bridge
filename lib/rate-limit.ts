@@ -51,6 +51,8 @@ export const RATE_LIMITS = {
   emailVerification: { limit: 5, windowSeconds: 3600 },
   /** ドメイン確認。外部 DNS への問い合わせが発生するため絞る。 */
   domainVerification: { limit: 20, windowSeconds: 3600 },
+  /** データリクエストの送信。他組織へ大量に送りつけるのを抑止する。 */
+  dataRequest: { limit: 20, windowSeconds: 3600 },
 } as const satisfies Record<string, RateLimitRule>;
 
 /** now を含む固定ウィンドウの開始時刻を求める(エポックからの切り捨て)。 */

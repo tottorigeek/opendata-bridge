@@ -30,6 +30,8 @@ model Organization {
   domainVerifiedAt DateTime?
   /// DNS TXT レコードによる確認に使うトークン。主張ドメインを変えると再発行する。
   domainToken    String?
+  /// データリクエストの受付範囲。組織ごとに誰から受け取るかを決める。
+  requestPolicy RequestPolicy @default(VERIFIED_USERS)
   /// 組織の所在自治体(都道府県 / 市区町村)。lib/regions.ts のマスタ値を入れる。
   /// データセット側に対象地域が未設定のとき、カタログ検索はここへフォールバックする。
   prefecture   String?
@@ -37,6 +39,8 @@ model Organization {
   createdAt    DateTime  @default(now())
   users        User[]
   datasets     Dataset[]
+  /// この組織が受け取ったデータリクエスト。
+  requests     DataRequest[]
 
   @@index([prefecture, municipality])
 }
@@ -61,6 +65,89 @@ model User {
   apiKeys        ApiKey[]
   sessions       Session[]
   emailVerifications EmailVerification[]
+  /// この人が送ったデータリクエストと、書いた返信。
+  dataRequests       DataRequest[]
+  requestReplies     DataRequestReply[]
+}
+
+/// データリクエストの受付範囲。
+enum RequestPolicy {
+  /// メール確認済みの利用者なら誰でも送れる。住民やシビックテックの指摘を拾える。
+  VERIFIED_USERS
+  /// 確認済み組織に所属する人だけが送れる。
+  VERIFIED_ORGS
+  /// 受け付けない。
+  CLOSED
+}
+
+enum RequestKind {
+  /// 新しいデータの公開依頼。
+  CREATE
+  /// 既存データの修正依頼。
+  FIX
+}
+
+enum RequestStatus {
+  /// 受付済み・未対応。
+  OPEN
+  /// 対応中。
+  IN_PROGRESS
+  /// 対応して完了した。
+  RESOLVED
+  /// 対応しないと判断した。
+  DECLINED
+}
+
+/// 組織へのデータリクエスト(公開依頼 / 修正依頼)。
+///
+/// 現時点では文章でのやり取りに限り、CSV の差分提案は扱わない。
+/// 差分提案はバージョン機能に依存するため、そちらの実装後に足す
+/// (docs/design/merge-design.md の実装順序 5)。
+model DataRequest {
+  id             String        @id @default(cuid())
+  /// 宛先の組織。
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  /// 修正依頼のとき、対象のデータセット。公開依頼では null。
+  /// 対象が削除されても依頼自体は残す。
+  datasetId      String?
+  dataset        Dataset?      @relation(fields: [datasetId], references: [id], onDelete: SetNull)
+  /// 送信者。退会しても依頼は残すため任意参照にする。
+  requesterId    String?
+  requester      User?         @relation(fields: [requesterId], references: [id], onDelete: SetNull)
+  /// 送信時点の送信者名と組織名の写し(退会・改名後も誰からの依頼か分かるように)。
+  requesterName  String
+  requesterOrgName String
+
+  kind   RequestKind
+  status RequestStatus @default(OPEN)
+  title  String
+  body   String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  replies DataRequestReply[]
+
+  @@index([organizationId, status])
+  @@index([datasetId])
+}
+
+/// リクエストへの返信。送信者と受け取った組織の双方が書ける。
+model DataRequestReply {
+  id        String      @id @default(cuid())
+  requestId String
+  request   DataRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  authorId  String?
+  author    User?       @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  /// 投稿時点の著者名の写し。
+  authorName String
+  /// 受け取った組織側からの返信か(表示の出し分けに使う)。
+  fromOrganization Boolean @default(false)
+  body      String
+  createdAt DateTime @default(now())
+
+  @@index([requestId])
 }
 
 /// メール確認トークン。
@@ -134,6 +221,8 @@ model Dataset {
   lineage         MergeLineage? @relation("MergeOutput")
   /// このデータセットを入力として使ったマージの記録。
   usedInMerges    MergeLineageInput[] @relation("MergeInput")
+  /// このデータセットに対する修正リクエスト。
+  requests        DataRequest[]
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 

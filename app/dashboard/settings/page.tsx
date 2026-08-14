@@ -1,5 +1,8 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
+import RequestPolicyForm from "@/components/settings/RequestPolicyForm";
+import { REQUEST_POLICY_LABEL } from "@/lib/requests";
 import { ORG_TYPE_LABEL, formatRegion } from "@/lib/datasets";
 import OrgRegionForm from "@/components/settings/OrgRegionForm";
 import EmailVerificationNotice from "@/components/settings/EmailVerificationNotice";
@@ -99,6 +102,31 @@ export default async function SettingsPage() {
         ) : (
           <div className="mt-4 text-sm">
             <p className="text-slate-900">{region ?? "未設定"}</p>
+            <p className="mt-1 text-xs text-slate-500">
+              変更できるのは組織の ADMIN のみです。
+            </p>
+          </div>
+        )}
+      </section>
+
+      <section className="mt-6 rounded-xl border border-slate-200 bg-white p-6">
+        <h2 className="font-semibold text-slate-900">データリクエストの受付範囲</h2>
+        <p className="mt-1 text-sm text-slate-600">
+          他組織や利用者から、データの公開依頼・修正依頼を受け取る範囲を決めます。
+          受け取ったリクエストは
+          <Link href="/dashboard/requests" className="mx-1 text-sky-700 hover:underline">
+            データリクエスト
+          </Link>
+          で確認できます。
+        </p>
+
+        {isAdmin ? (
+          <div className="mt-5">
+            <RequestPolicyForm policy={org.requestPolicy} />
+          </div>
+        ) : (
+          <div className="mt-4 text-sm">
+            <p className="text-slate-900">{REQUEST_POLICY_LABEL[org.requestPolicy]}</p>
             <p className="mt-1 text-xs text-slate-500">
               変更できるのは組織の ADMIN のみです。
             </p>

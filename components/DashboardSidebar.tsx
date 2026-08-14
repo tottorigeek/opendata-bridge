@@ -7,6 +7,7 @@ import LogoutButton from "@/components/LogoutButton";
 const NAV = [
   { href: "/dashboard/datasets", label: "データセット" },
   { href: "/dashboard/merge", label: "マージ" },
+  { href: "/dashboard/requests", label: "データリクエスト" },
   { href: "/dashboard/api-keys", label: "APIキー" },
   { href: "/dashboard/settings", label: "組織設定" },
 ];

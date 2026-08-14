@@ -89,6 +89,20 @@ export default async function OrganizationProfilePage({
             </p>
           )}
 
+          {!isOwn && organization.requestPolicy !== "CLOSED" && (
+            <div className="mt-6">
+              <Link
+                href={`/organizations/${organization.id}/requests/new`}
+                className="inline-block rounded-md bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-sky-700"
+              >
+                データリクエストを送る
+              </Link>
+              <p className="mt-1.5 text-xs text-slate-500">
+                データの誤りの指摘や、新しいデータの公開依頼を送れます。
+              </p>
+            </div>
+          )}
+
           <div className="mt-8 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-slate-900">
               公開しているデータ

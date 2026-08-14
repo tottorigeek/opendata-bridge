@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { parseRegionInput } from "@/lib/datasets";
+import { REQUEST_POLICIES } from "@/lib/requests";
 
 /**
  * 組織情報の更新。現時点では所在地(都道府県 / 市区町村)のみ。
@@ -28,18 +29,39 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "リクエスト形式が不正です。" }, { status: 400 });
   }
 
-  const region = parseRegionInput(
-    form.get("prefecture"),
-    form.get("municipality"),
-  );
+  // 設定画面には複数のフォームがあるため、送られてきた項目だけを更新する。
+  // 所在地を送らないフォームの保存で所在地が消える、といった事故を避ける。
+  const data: {
+    prefecture?: string | null;
+    municipality?: string | null;
+    requestPolicy?: (typeof REQUEST_POLICIES)[number];
+  } = {};
+
+  if (form.has("prefecture")) {
+    const region = parseRegionInput(
+      form.get("prefecture"),
+      form.get("municipality"),
+    );
+    data.prefecture = region.prefecture;
+    data.municipality = region.municipality;
+  }
+
+  const policyRaw = form.get("requestPolicy");
+  if (typeof policyRaw === "string") {
+    if (!(REQUEST_POLICIES as readonly string[]).includes(policyRaw)) {
+      return NextResponse.json({ error: "受付範囲の値が不正です。" }, { status: 400 });
+    }
+    data.requestPolicy = policyRaw as (typeof REQUEST_POLICIES)[number];
+  }
+
+  if (Object.keys(data).length === 0) {
+    return NextResponse.json({ error: "更新する項目がありません。" }, { status: 400 });
+  }
 
   await prisma.organization.update({
     where: { id: user.organizationId },
-    data: {
-      prefecture: region.prefecture,
-      municipality: region.municipality,
-    },
+    data,
   });
 
-  return NextResponse.json({ ok: true, ...region });
+  return NextResponse.json({ ok: true, ...data });
 }

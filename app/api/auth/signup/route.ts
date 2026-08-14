@@ -7,6 +7,7 @@ import {
   consumeRateLimit,
   sweepRateLimits,
 } from "@/lib/rate-limit";
+import { issueEmailVerification } from "@/lib/verification";
 
 type OrgType = "GOVERNMENT" | "PRIVATE";
 
@@ -95,5 +96,14 @@ export async function POST(request: Request) {
   });
 
   await createSession(user.id);
+
+  // 確認メールを送る。送信基盤が未設定の環境ではログ出力に切り替わるため、
+  // ここで失敗しても登録自体は成立させる(後からダッシュボードで再送できる)。
+  try {
+    await issueEmailVerification(user.id, user.email);
+  } catch (e) {
+    console.error("[signup] 確認メールの送信に失敗しました", e);
+  }
+
   return NextResponse.json({ ok: true });
 }

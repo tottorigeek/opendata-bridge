@@ -75,6 +75,12 @@ export default async function OrganizationProfilePage({
                 {datasets.length.toLocaleString("ja-JP")} 件
               </dd>
             </div>
+            {organization.verifiedDomain && (
+              <div>
+                <dt className="text-xs text-slate-500">確認済みドメイン</dt>
+                <dd className="text-slate-800">{organization.verifiedDomain}</dd>
+              </div>
+            )}
           </dl>
 
           {!organization.verified && (

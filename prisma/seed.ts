@@ -124,7 +124,8 @@ async function main() {
 
   // ストレージ抽象(ローカル or Vercel Blob)を dynamic import で読み込む。
   // seed は素の Node スクリプトのため、TS モジュールを実行時に取り込む。
-  const { saveDatasetCsv, datasetStorageKey } = await import("../lib/storage.ts");
+  const { saveCsvObject, datasetVersionStorageKey } = await import("../lib/storage.ts");
+  const { createHash } = await import("node:crypto");
 
   // --- 既存データのクリーンアップ(冪等性のため) --------------------------
   // ローカルドライバ時は storage/datasets を空にしてから DB を作り直す。
@@ -138,6 +139,7 @@ async function main() {
     // ディレクトリが無ければ後段の保存で作成する
   }
 
+  await prisma.notification.deleteMany();
   await prisma.rateLimit.deleteMany();
   await prisma.session.deleteMany();
   await prisma.apiKey.deleteMany();
@@ -219,11 +221,25 @@ async function main() {
       },
     });
 
-    // storage(ローカル or Blob)へ実データを配置し、filePath を確定させる。
-    await saveDatasetCsv(created.id, content);
+    // 版を伴って配置する。アプリ側の登録経路(lib/versions.ts)と同じく、
+    // 第 1 版を作って Dataset 側にその写しを入れる。
+    const filePath = datasetVersionStorageKey(created.id, 1);
+    await saveCsvObject(filePath, content);
+    await prisma.datasetVersion.create({
+      data: {
+        datasetId: created.id,
+        number: 1,
+        filePath,
+        columnsJson: JSON.stringify(columns),
+        rowCount,
+        contentHash: createHash("sha256").update(Buffer.from(content, "utf-8")).digest("hex"),
+        source: "UPLOAD",
+        note: "シードデータ",
+      },
+    });
     await prisma.dataset.update({
       where: { id: created.id },
-      data: { filePath: datasetStorageKey(created.id) },
+      data: { filePath },
     });
 
     console.log(`データセットを作成: ${spec.title}(${rowCount} 行)`);

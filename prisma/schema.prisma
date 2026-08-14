@@ -289,6 +289,19 @@ model MergeLineage {
   /// 出力列 → 由来(どちらの入力のどの列か)の対応の JSON。
   columnOriginsJson String @default("[]")
 
+  /// 出典が更新されたときに自動で作り直すか。既定はピン留め(false)。
+  /// latest は問題を消すのではなく選択可能にするだけなので、既定にはしない
+  /// (docs/design/merge-design.md §4-2)。
+  followLatest Boolean @default(false)
+  /// 初回マージ時の統計。累積での品質低下を見る基準線。
+  /// 前回比だけだと 40%→30%→22% のように毎回閾値を割らずに劣化する経路を
+  /// 素通りするため、初回値からの低下も併せて判定する。
+  baselineStatsJson String @default("{}")
+  /// 最後に作り直した日時。
+  refreshedAt DateTime?
+  /// 直近の作り直しの結果メッセージ(品質ゲートで止めた理由など)。
+  lastRefreshMessage String @default("")
+
   createdAt DateTime @default(now())
 
   inputs MergeLineageInput[]

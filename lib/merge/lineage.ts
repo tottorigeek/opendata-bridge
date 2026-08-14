@@ -52,6 +52,9 @@ export async function recordMergeLineage(params: RecordLineageParams) {
       keyB: params.keyB,
       level: params.level,
       statsJson: JSON.stringify(params.analysis),
+      // 初回の統計は基準線として別に持つ。前回比だけだと、毎回閾値を割らずに
+      // 徐々に劣化する経路を素通りしてしまうため(§4-2)。
+      baselineStatsJson: JSON.stringify(params.analysis),
       columnOriginsJson: JSON.stringify(params.columnOrigins),
       inputs: {
         create: params.inputs.map((input) => ({

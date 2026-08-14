@@ -22,6 +22,14 @@ model Organization {
   /// 登録時は自己申告のため常に false。運営が確認して初めて true にする。
   /// カタログの「行政」バッジはこのフラグが true のときだけ正式表示する。
   verified     Boolean   @default(false)
+  /// 組織が主張しているドメイン(例: pref.tottori.lg.jp)。確認前でも保持する。
+  claimedDomain  String?
+  /// 確認が取れたドメイン。verified を立てた根拠として残す。
+  verifiedDomain String?
+  /// ドメイン確認が完了した日時。
+  domainVerifiedAt DateTime?
+  /// DNS TXT レコードによる確認に使うトークン。主張ドメインを変えると再発行する。
+  domainToken    String?
   /// 組織の所在自治体(都道府県 / 市区町村)。lib/regions.ts のマスタ値を入れる。
   /// データセット側に対象地域が未設定のとき、カタログ検索はここへフォールバックする。
   prefecture   String?
@@ -44,11 +52,35 @@ model User {
   passwordHash   String
   name           String
   role           Role         @default(MEMBER)
+  /// メールアドレスの確認が完了した日時。未確認は null。
+  /// リクエスト機能など「なりすましが問題になる操作」の入口で参照する。
+  emailVerifiedAt DateTime?
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
   createdAt      DateTime     @default(now())
   apiKeys        ApiKey[]
   sessions       Session[]
+  emailVerifications EmailVerification[]
+}
+
+/// メール確認トークン。
+///
+/// 平文のトークンは本人へ送るリンクにしか現れず、DB にはハッシュだけを持つ
+/// (API キーと同じ方針)。漏洩時に DB の値からリンクを復元できないようにするため。
+model EmailVerification {
+  id        String @id @default(cuid())
+  /// トークンの SHA-256(hex)。
+  tokenHash String @unique
+  userId    String
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// 発行時点の宛先。発行後にメールアドレスが変わった場合、このトークンは無効とする。
+  email     String
+  expiresAt DateTime
+  consumedAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 /// 発行済みセッションの台帳。JWT の jti をそのまま id に使う。

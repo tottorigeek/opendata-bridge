@@ -47,6 +47,10 @@ export const RATE_LIMITS = {
    * 組織単位で回数を抑える。
    */
   sourceFetch: { limit: 60, windowSeconds: 300 },
+  /** 確認メールの再送。本システムを踏み台にした大量送信を防ぐ。 */
+  emailVerification: { limit: 5, windowSeconds: 3600 },
+  /** ドメイン確認。外部 DNS への問い合わせが発生するため絞る。 */
+  domainVerification: { limit: 20, windowSeconds: 3600 },
 } as const satisfies Record<string, RateLimitRule>;
 
 /** now を含む固定ウィンドウの開始時刻を求める(エポックからの切り捨て)。 */

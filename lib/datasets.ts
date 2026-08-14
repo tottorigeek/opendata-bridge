@@ -207,6 +207,8 @@ export interface CatalogFilters {
   prefecture?: string;
   /** 市区町村での絞り込み(任意)。都道府県と独立に指定できる。 */
   municipality?: string;
+  /** 発行組織での絞り込み(任意)。組織ページはこれで一覧を作る。 */
+  organizationId?: string;
 }
 
 /**
@@ -318,6 +320,10 @@ export function buildCatalogWhere(
 
   if (filters.orgType) {
     and.push({ organization: { type: filters.orgType } });
+  }
+
+  if (filters.organizationId) {
+    and.push({ organizationId: filters.organizationId });
   }
 
   const tag = filters.tag?.trim();

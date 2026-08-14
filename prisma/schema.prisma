@@ -65,9 +65,42 @@ model User {
   apiKeys        ApiKey[]
   sessions       Session[]
   emailVerifications EmailVerification[]
+  /// メール通知を受け取るか。アプリ内通知は設定にかかわらず必ず作られる
+  /// (メールが届かない環境でも見落とさないようにするため)。
+  emailNotifications Boolean @default(true)
   /// この人が送ったデータリクエストと、書いた返信。
   dataRequests       DataRequest[]
   requestReplies     DataRequestReply[]
+  notifications      Notification[]
+}
+
+enum NotificationType {
+  /// 自組織宛にデータリクエストが届いた。
+  REQUEST_RECEIVED
+  /// 関わっているリクエストに返信がついた。
+  REQUEST_REPLIED
+  /// 送ったリクエストの状態が変わった。
+  REQUEST_STATUS_CHANGED
+}
+
+/// アプリ内通知。
+///
+/// メール送信は環境によって使えない(プロバイダ未設定・到達不能)ため、
+/// 通知の正本はこのテーブルに置く。メールはあくまで補助的な配信手段。
+model Notification {
+  id     String           @id @default(cuid())
+  userId String
+  user   User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type   NotificationType
+  title  String
+  body   String           @default("")
+  /// クリック時の遷移先(アプリ内の相対パス)。
+  link   String
+  readAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId, readAt])
+  @@index([userId, createdAt])
 }
 
 /// データリクエストの受付範囲。

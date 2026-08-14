@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import DashboardSidebar from "@/components/DashboardSidebar";
+import { countUnread } from "@/lib/notifications";
 
 const ORG_TYPE_LABEL: Record<string, string> = {
   GOVERNMENT: "行政",
@@ -15,9 +16,13 @@ export default async function DashboardLayout({
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
+  // 未読件数はサイドバーのバッジに使う。ダッシュボード全体で共有する値なので
+  // レイアウトで一度だけ数える。
+  const unreadCount = await countUnread(user.id);
+
   return (
     <div className="flex min-h-screen">
-      <DashboardSidebar />
+      <DashboardSidebar unreadCount={unreadCount} />
       <div className="flex flex-1 flex-col">
         <header className="flex h-16 items-center justify-between border-b border-slate-200 bg-white px-6">
           <div className="text-sm text-slate-500">

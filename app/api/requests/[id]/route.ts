@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { REQUEST_STATUSES, getVisibleRequest } from "@/lib/requests";
+import { memberIdsOf, notify } from "@/lib/notifications";
+import {
+  REQUEST_STATUSES,
+  REQUEST_STATUS_LABEL,
+  getVisibleRequest,
+} from "@/lib/requests";
 
 const MAX_BODY = 5000;
 
@@ -85,6 +90,33 @@ export async function PATCH(
       await tx.dataRequest.update({ where: { id }, data: { updatedAt: new Date() } });
     }
   });
+
+  // 相手側に知らせる。受け取った組織が動いたなら送信者へ、
+  // 送信者が返信したなら組織のメンバーへ。
+  const recipients = visible.isRecipient
+    ? visible.request.requesterId
+      ? [visible.request.requesterId]
+      : []
+    : await memberIdsOf(visible.request.organizationId);
+
+  if (reply) {
+    await notify({
+      userIds: recipients,
+      type: "REQUEST_REPLIED",
+      title: `返信がありました: ${visible.request.title}`,
+      body: `${user.name} さんが返信しました。`,
+      link: `/dashboard/requests/${id}`,
+    });
+  }
+  if (status) {
+    await notify({
+      userIds: recipients,
+      type: "REQUEST_STATUS_CHANGED",
+      title: `リクエストの状態が変わりました: ${visible.request.title}`,
+      body: `状態が「${REQUEST_STATUS_LABEL[status] ?? status}」になりました。`,
+      link: `/dashboard/requests/${id}`,
+    });
+  }
 
   return NextResponse.json({ ok: true });
 }

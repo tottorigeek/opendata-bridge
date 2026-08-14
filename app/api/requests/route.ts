@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { RATE_LIMITS, consumeRateLimit } from "@/lib/rate-limit";
+import { memberIdsOf, notify } from "@/lib/notifications";
 import { REQUEST_KINDS, canSendRequest } from "@/lib/requests";
 
 const MAX_TITLE = 200;
@@ -106,6 +107,18 @@ export async function POST(request: Request) {
       title,
       body: text,
     },
+  });
+
+  // 受け取った組織のメンバー全員に知らせる。宛先が誰か分からないと
+  // 「誰も気づかないまま放置される」ことになるため、まずは全員に届ける。
+  await notify({
+    userIds: await memberIdsOf(organizationId),
+    type: "REQUEST_RECEIVED",
+    title: `データリクエストが届きました: ${title}`,
+    body: `${user.organization.name} の ${user.name} さんから ${
+      kind === "FIX" ? "修正依頼" : "公開依頼"
+    }が届きました。`,
+    link: `/dashboard/requests/${created.id}`,
   });
 
   return NextResponse.json({ ok: true, id: created.id });

@@ -8,11 +8,13 @@ const NAV = [
   { href: "/dashboard/datasets", label: "データセット" },
   { href: "/dashboard/merge", label: "マージ" },
   { href: "/dashboard/requests", label: "データリクエスト" },
+  { href: "/dashboard/notifications", label: "通知" },
   { href: "/dashboard/api-keys", label: "APIキー" },
   { href: "/dashboard/settings", label: "組織設定" },
 ];
 
-export default function DashboardSidebar() {
+/** 未読件数はサーバー側で数え、レイアウトから渡す。 */
+export default function DashboardSidebar({ unreadCount = 0 }: { unreadCount?: number }) {
   const pathname = usePathname();
 
   return (
@@ -50,6 +52,11 @@ export default function DashboardSidebar() {
               }`}
             >
               {item.label}
+              {item.href === "/dashboard/notifications" && unreadCount > 0 && (
+                <span className="ml-2 rounded-full bg-sky-600 px-1.5 py-0.5 text-xs font-semibold text-white">
+                  {unreadCount}
+                </span>
+              )}
             </Link>
           );
         })}

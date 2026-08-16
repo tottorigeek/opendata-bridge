@@ -81,6 +81,8 @@ enum NotificationType {
   REQUEST_REPLIED
   /// 送ったリクエストの状態が変わった。
   REQUEST_STATUS_CHANGED
+  /// マージ結果の自動作り直しを品質ゲートで止めた。
+  MERGE_REFRESH_BLOCKED
 }
 
 /// アプリ内通知。

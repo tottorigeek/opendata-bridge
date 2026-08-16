@@ -16,6 +16,7 @@ export const NOTIFICATION_TYPE_LABEL: Record<string, string> = {
   REQUEST_RECEIVED: "リクエスト受信",
   REQUEST_REPLIED: "返信",
   REQUEST_STATUS_CHANGED: "状態の変更",
+  MERGE_REFRESH_BLOCKED: "自動更新の停止",
 };
 
 export interface NotifyParams {

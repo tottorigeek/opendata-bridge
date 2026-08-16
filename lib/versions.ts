@@ -4,6 +4,7 @@ import type { VersionSource } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
   datasetVersionStorageKey,
+  deleteCsvObject,
   readCsvObject,
   saveCsvObject,
 } from "@/lib/storage";
@@ -18,6 +19,11 @@ import {
  * 識別子を連番にしているのは、日付だと同日の複数更新で衝突するうえ、
  * 「データの基準日」と混同されるため(docs/design/merge-design.md §4-3)。
  */
+
+/**
+ * 参照されていない版を残す数。実データの容量を見て調整する前提の初期値。
+ */
+const KEEP_VERSIONS = 5;
 
 export function hashCsv(content: Buffer | string): string {
   const body = typeof content === "string" ? Buffer.from(content, "utf-8") : content;
@@ -98,7 +104,51 @@ export async function createDatasetVersion(
     }),
   ]);
 
+  // 版が増えたので、参照されていない古い版を整理する。
+  await pruneVersions(params.datasetId);
+
   return { number, filePath, contentHash, unchanged: false };
+}
+
+/**
+ * 参照されていない古い版を、直近 KEEP_VERSIONS 件だけ残して削除する。
+ *
+ * 「古い順に N 個残す」では不十分で、参照の有無が第一条件になる。
+ * マージの来歴がピン留めしている版を消すと、その来歴が指す先が失われ
+ * 「過去のマージを再現できる」という版の目的そのものが壊れるため
+ * (docs/design/merge-design.md §4-4)。
+ *
+ * 最新版も常に残す(現在の中身なので当然)。
+ */
+export async function pruneVersions(datasetId: string): Promise<number> {
+  const versions = await prisma.datasetVersion.findMany({
+    where: { datasetId },
+    orderBy: { number: "desc" },
+  });
+  if (versions.length <= KEEP_VERSIONS) return 0;
+
+  // この データセットの版を参照している来歴を集める。
+  const referenced = await prisma.mergeLineageInput.findMany({
+    where: { datasetId, versionNumber: { not: null } },
+    select: { versionNumber: true },
+  });
+  const pinned = new Set(referenced.map((r) => r.versionNumber));
+
+  // 新しい順に KEEP_VERSIONS 件は無条件で残し、それ以降は参照されていれば残す。
+  const removable = versions
+    .slice(KEEP_VERSIONS)
+    .filter((v) => !pinned.has(v.number));
+  if (removable.length === 0) return 0;
+
+  // 先に実体を消し、そのあと行を消す。逆順だと、行が無いのに実体が残る
+  // 「参照できないゴミ」が生まれる。
+  for (const version of removable) {
+    await deleteCsvObject(version.filePath);
+  }
+  const result = await prisma.datasetVersion.deleteMany({
+    where: { id: { in: removable.map((v) => v.id) } },
+  });
+  return result.count;
 }
 
 /** 版の一覧(新しい順)。 */

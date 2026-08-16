@@ -2,10 +2,16 @@ import { NextResponse } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { syncDataSource } from "@/lib/sources/sync";
+import { refreshStaleFollowers } from "@/lib/merge/refresh";
 
 /**
  * GET /api/cron/sync
- * syncMode = SCHEDULED のデータソースをまとめて同期する(Vercel Cron から呼ぶ)。
+ * syncMode = SCHEDULED のデータソースをまとめて同期し、続けて
+ * latest 追従が有効なマージ結果のうち出典が更新されたものを作り直す
+ * (Vercel Cron から呼ぶ)。
+ *
+ * 同期の直後に作り直すのは、出典が新しくなった直後こそ追従したいタイミングだから。
+ * 作り直しは品質ゲートを通り、通らなければ適用せず通知だけ行う。
  *
  * 認証: `Authorization: Bearer <CRON_SECRET>`。
  * Vercel Cron は CRON_SECRET を設定しておくと自動でこのヘッダを付ける。
@@ -67,10 +73,19 @@ export async function GET(request: Request) {
     });
   }
 
+  // 出典が新しくなったので、latest 追従のマージ結果を作り直す。
+  const refreshed = await refreshStaleFollowers();
+
   return NextResponse.json({
     processed: results.length,
     succeeded: results.filter((r) => r.ok).length,
     failed: results.filter((r) => !r.ok).length,
     results,
+    refresh: {
+      processed: refreshed.length,
+      applied: refreshed.filter((r) => r.applied).length,
+      blocked: refreshed.filter((r) => !r.applied).length,
+      results: refreshed,
+    },
   });
 }

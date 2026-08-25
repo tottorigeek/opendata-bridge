@@ -7,7 +7,8 @@ export default async function SiteHeader() {
 
   return (
     <header className="border-b border-slate-200 bg-white">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
+      {/* リンクが増えると狭い画面で横に収まらないため、折り返せるようにしておく。 */}
+      <div className="mx-auto flex min-h-16 max-w-6xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-2">
         <Link href="/" className="flex items-center gap-2">
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-600 text-sm font-bold text-white">
             OB
@@ -17,7 +18,13 @@ export default async function SiteHeader() {
           </span>
         </Link>
 
-        <nav className="flex items-center gap-1 text-sm font-medium text-slate-600">
+        <nav className="flex flex-wrap items-center gap-1 text-sm font-medium text-slate-600">
+          <Link
+            href="/about"
+            className="rounded-md px-3 py-2 hover:bg-slate-100 hover:text-slate-900"
+          >
+            サービス紹介
+          </Link>
           <Link
             href="/catalog"
             className="rounded-md px-3 py-2 hover:bg-slate-100 hover:text-slate-900"

@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -10,6 +11,15 @@ import ApiKeysManager, {
 export default async function ApiKeysPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+
+  // API 利用例の URL 表示に使う。クライアント側で window から読むと
+  // ハイドレーション前に既定値が見えてしまうため、サーバーで解決して渡す。
+  const headerList = await headers();
+  const host = headerList.get("host") ?? "localhost:3000";
+  const proto =
+    headerList.get("x-forwarded-proto") ??
+    (host.startsWith("localhost") ? "http" : "https");
+  const origin = `${proto}://${host}`;
 
   const keys = await prisma.apiKey.findMany({
     where: { userId: user.id },
@@ -39,7 +49,11 @@ export default async function ApiKeysPage() {
         公開REST APIを利用するためのキーを発行・管理します。発行時に表示される全文は一度だけ表示されます。
       </p>
       <div className="mt-8">
-        <ApiKeysManager initialKeys={initialKeys} initialUsage={initialUsage} />
+        <ApiKeysManager
+          initialKeys={initialKeys}
+          initialUsage={initialUsage}
+          origin={origin}
+        />
       </div>
     </div>
   );

@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+
+      # postinstall で prisma generate が走る(build に必要)
+      - run: npm ci
+
+      - run: npm run lint
+
+      # `npm run build` は prisma migrate deploy を含み実 DB を要するため、
+      # CI ではコンパイルと型検査だけを行う next build を直接実行する。
+      # 以下の env はビルドを通すためのダミーで、接続は行わない。
+      - run: npx next build
+        env:
+          DATABASE_URL: postgresql://user:pass@localhost:5432/db
+          DIRECT_URL: postgresql://user:pass@localhost:5432/db
+          SESSION_SECRET: ci-dummy-secret-value-not-used-at-runtime

@@ -25,8 +25,11 @@ jobs:
         with:
           path-to-signatures: signatures/version1/cla.json
           path-to-document: https://github.com/tottorigeek/opendata-bridge/blob/main/CLA.md
-          branch: main
-          allowlist: tottorigeek,bot*,dependabot[bot]
+          # main はブランチ保護(PR 必須)のため署名ファイルを直接コミットできない。
+          # 署名記録は保護なしの専用ブランチに置く。
+          branch: cla-signatures
+          # PR 作成者ではなく「コミットの著者」が照合される点に注意。
+          allowlist: sekir-yamata,tottorigeek,bot*,dependabot[bot]
           custom-notsigned-prcomment: |
             PR ありがとうございます。マージの前に [CLA.md](https://github.com/tottorigeek/opendata-bridge/blob/main/CLA.md)(貢献者ライセンス同意書)への署名をお願いしています。
             著作権はあなたに残ります。内容をご確認のうえ、下記の文言をこの PR にコメントしてください。

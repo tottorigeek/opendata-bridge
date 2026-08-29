@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 export type ApiKeyRow = {
   id: string;
@@ -34,9 +34,11 @@ function formatDate(iso: string): string {
 export default function ApiKeysManager({
   initialKeys,
   initialUsage,
+  origin,
 }: {
   initialKeys: ApiKeyRow[];
   initialUsage: UsageSummary;
+  origin: string;
 }) {
   const [keys, setKeys] = useState<ApiKeyRow[]>(initialKeys);
   const [usage, setUsage] = useState<UsageSummary>(initialUsage);
@@ -45,11 +47,6 @@ export default function ApiKeysManager({
   const [error, setError] = useState<string | null>(null);
   const [issuedKey, setIssuedKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [origin, setOrigin] = useState("http://localhost:3000");
-
-  useEffect(() => {
-    if (typeof window !== "undefined") setOrigin(window.location.origin);
-  }, []);
 
   async function refresh() {
     const res = await fetch("/api/keys", { cache: "no-store" });

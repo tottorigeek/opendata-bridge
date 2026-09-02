@@ -4,7 +4,7 @@ import { authenticateApiKey, apiError } from "@/lib/api-auth";
 import { sanitizeCsvRows } from "@/lib/csv";
 import {
   findAccessibleDataset,
-  readDatasetCsv,
+  readDatasetCsvAtVersion,
   parsePaging,
 } from "../../../_shared";
 
@@ -14,7 +14,8 @@ const MAX_LIMIT = 1000;
 /**
  * GET /api/v1/datasets/{id}/data
  * データ本体。format=json|csv(デフォルト json), limit(既定100/最大1000), offset。
- * json: ヘッダーをキーにしたオブジェクト配列。
+ * version を指定するとその版、省略すれば最新版を返す。
+ * json: ヘッダーをキーにしたオブジェクト配列 + どの版を返したかの情報。
  */
 export async function GET(
   request: NextRequest,
@@ -29,18 +30,32 @@ export async function GET(
     return apiError(404, "not_found", "データセットが見つかりません。");
   }
 
-  const csv = await readDatasetCsv(dataset);
-  if (!csv) {
-    return apiError(
-      404,
-      "data_not_available",
-      "このデータセットにはデータ本体が登録されていません。",
-    );
-  }
-
   const { searchParams } = request.nextUrl;
   const format = (searchParams.get("format") ?? "json").toLowerCase();
   const { limit, offset } = parsePaging(searchParams, DEFAULT_LIMIT, MAX_LIMIT);
+
+  // version 未指定なら最新版。指定時は 1 以上の整数のみ受け付ける。
+  const versionParam = searchParams.get("version");
+  let versionNumber: number | null = null;
+  if (versionParam !== null) {
+    const parsed = Number.parseInt(versionParam, 10);
+    if (!Number.isInteger(parsed) || parsed < 1) {
+      return apiError(400, "invalid_version", "version は 1 以上の整数で指定してください。");
+    }
+    versionNumber = parsed;
+  }
+
+  const resolved = await readDatasetCsvAtVersion(dataset, versionNumber);
+  if (!resolved) {
+    return apiError(
+      404,
+      "data_not_available",
+      versionNumber === null
+        ? "このデータセットにはデータ本体が登録されていません。"
+        : `第 ${versionNumber} 版は存在しません。`,
+    );
+  }
+  const { csv, version } = resolved;
 
   const total = csv.rows.length;
   const sliced = csv.rows.slice(offset, offset + limit);
@@ -76,6 +91,9 @@ export async function GET(
 
   return NextResponse.json({
     datasetId: dataset.id,
+    // どの版を返したかを明示する。取り込み側はこれを記録しておけば、
+    // 同じ内容を ?version=N で取り直せる。
+    version,
     columns: csv.header,
     data: rows,
     pagination: { total, limit, offset, count: rows.length },

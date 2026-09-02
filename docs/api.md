@@ -134,15 +134,17 @@ curl -H "Authorization: Bearer odb_あなたのキー" \
 
 | 名前     | 型     | 既定   | 説明                                   |
 | -------- | ------ | ------ | -------------------------------------- |
-| `format` | string | `json` | `json` または `csv`                    |
-| `limit`  | number | 100    | 取得行数(最大 1000)                  |
-| `offset` | number | 0      | 取得開始行                             |
+| `format`  | string | `json` | `json` または `csv`                                  |
+| `limit`   | number | 100    | 取得行数(最大 1000)                                |
+| `offset`  | number | 0      | 取得開始行                                           |
+| `version` | number | -      | 版番号。省略すると最新版。存在しない版は `404`        |
 
 **JSON レスポンス**(ヘッダー行をキーにしたオブジェクト配列)
 
 ```json
 {
   "datasetId": "clxxxx",
+  "version": { "number": 3, "createdAt": "2026-09-01T02:00:00.000Z" },
   "columns": ["町丁名", "人口", "世帯数"],
   "data": [
     { "町丁名": "本町1丁目", "人口": "1234", "世帯数": "567" }
@@ -166,6 +168,10 @@ curl -H "Authorization: Bearer odb_あなたのキー" \
 ```
 
 データ本体(CSV)が未登録の場合は `404`(`data_not_available`)。
+
+`version` は返した版の情報です(版を持たないデータセットでは `null`)。
+取り込み側はこの番号を記録しておけば、`?version=N` で後から同じ内容を取り直せます。
+`version` に 1 未満や数値以外を渡すと `400`(`invalid_version`)。
 
 ---
 

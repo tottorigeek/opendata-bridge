@@ -1,6 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { authenticateApiKey, apiError } from "@/lib/api-auth";
-import { findAccessibleDataset, serializeDataset } from "../../_shared";
+import {
+  findAccessibleDataset,
+  serializeDataset,
+  latestVersionInfo,
+} from "../../_shared";
 
 /**
  * GET /api/v1/datasets/{id}
@@ -19,5 +23,8 @@ export async function GET(
     return apiError(404, "not_found", "データセットが見つかりません。");
   }
 
-  return NextResponse.json({ data: serializeDataset(dataset) });
+  // 一覧では版を出さない(件数ぶんクエリが増えるため)。詳細でだけ返す。
+  return NextResponse.json({
+    data: { ...serializeDataset(dataset), version: await latestVersionInfo(dataset.id) },
+  });
 }

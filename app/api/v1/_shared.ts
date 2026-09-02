@@ -2,7 +2,8 @@ import "server-only";
 import { parse } from "csv-parse/sync";
 import type { Dataset, Organization, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { readDatasetCsv as readStoredCsv } from "@/lib/storage";
+import { readCsvObject } from "@/lib/storage";
+import { getVersion, latestVersion } from "@/lib/versions";
 
 export type DatasetWithOrg = Dataset & { organization: Organization };
 
@@ -77,12 +78,18 @@ export async function findAccessibleDataset(
 
 export type CsvData = { header: string[]; rows: string[][] };
 
-/** CSV を読み込みヘッダ + データ行に分解。ファイル未設定/未存在は null。 */
+/**
+ * CSV を読み込みヘッダ + データ行に分解。ファイル未設定/未存在は null。
+ *
+ * 実体のキーはデータセット id から一意に決まらない(版ごとに
+ * datasets/{id}/v{n}.csv が分かれる)ため、DB に記録された filePath を使う。
+ * id からキーを組み立てると、版を持つデータセットの本体を読めない。
+ */
 export async function readDatasetCsv(
   ds: Dataset,
 ): Promise<CsvData | null> {
   if (!ds.filePath) return null;
-  const buffer = await readStoredCsv(ds.id);
+  const buffer = await readCsvObject(ds.filePath);
   if (!buffer) return null;
   const content = buffer.toString("utf8");
 
@@ -107,4 +114,47 @@ export function parsePaging(
   limit = Math.min(limit, maxLimit);
   const offset = Number.isFinite(rawOffset) && rawOffset > 0 ? Math.floor(rawOffset) : 0;
   return { limit, offset };
+}
+
+/** API が返す版の情報。版を持たないデータセットでは null。 */
+export type VersionInfo = { number: number; createdAt: string } | null;
+
+/** 最新版の情報。取り込み側が「どの版を取り込んだか」を記録できるようにする。 */
+export async function latestVersionInfo(datasetId: string): Promise<VersionInfo> {
+  const v = await latestVersion(datasetId);
+  return v ? { number: v.number, createdAt: v.createdAt.toISOString() } : null;
+}
+
+export type ResolvedCsv = { csv: CsvData; version: VersionInfo };
+
+/**
+ * データ本体を読む。version を指定すればその版、省略すれば最新版。
+ *
+ * 版を指定できるようにしているのは、取り込み側が記録した版番号で
+ * あとから同じ内容を取り直せるようにするため(取り込みの再現性)。
+ */
+export async function readDatasetCsvAtVersion(
+  ds: Dataset,
+  versionNumber: number | null,
+): Promise<ResolvedCsv | null> {
+  if (versionNumber === null) {
+    const csv = await readDatasetCsv(ds);
+    if (!csv) return null;
+    return { csv, version: await latestVersionInfo(ds.id) };
+  }
+
+  const version = await getVersion(ds.id, versionNumber);
+  if (!version) return null;
+  const buffer = await readCsvObject(version.filePath);
+  if (!buffer) return null;
+
+  const records = parse(buffer.toString("utf8"), {
+    skip_empty_lines: true,
+    relax_column_count: true,
+  }) as string[][];
+  const [header = [], ...rows] = records;
+  return {
+    csv: { header, rows },
+    version: { number: version.number, createdAt: version.createdAt.toISOString() },
+  };
 }

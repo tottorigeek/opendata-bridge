@@ -40,6 +40,35 @@ export function parseColumns(columnsJson: string): string[] {
   }
 }
 
+/**
+ * 出典表示に必要な最小情報。
+ *
+ * CC-BY 等のライセンスはクレジット表示を条件にするため、データ本体を
+ * 複製・再配布する取り込み側は「誰の・どのデータセットを・どの条件で」使ったかを
+ * 保存する必要がある。本文取得の応答にこれを同梱することで、
+ * メタデータを別途取り直さなくても帰属表示が失われないようにする。
+ *
+ * licenseUnresolved が true のデータはライセンスが確定していない
+ * (マージ結果で入力から自動判定できなかった)。この状態のデータを
+ * 再配布してはいけないので、取り込み側が判断できるよう明示する。
+ */
+export type DatasetSource = {
+  organization: string;
+  dataset: string;
+  license: string;
+  licenseUnresolved: boolean;
+};
+
+/** データセットから出典ブロックを組み立てる。 */
+export function datasetSource(ds: DatasetWithOrg): DatasetSource {
+  return {
+    organization: ds.organization.name,
+    dataset: ds.title,
+    license: ds.license,
+    licenseUnresolved: ds.licenseUnresolved,
+  };
+}
+
 /** 一覧・詳細共通のメタデータ整形。 */
 export function serializeDataset(ds: DatasetWithOrg) {
   return {

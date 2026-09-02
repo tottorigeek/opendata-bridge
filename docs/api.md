@@ -145,6 +145,12 @@ curl -H "Authorization: Bearer odb_あなたのキー" \
 {
   "datasetId": "clxxxx",
   "version": { "number": 3, "createdAt": "2026-09-01T02:00:00.000Z" },
+  "source": {
+    "organization": "鳥取県",
+    "dataset": "町丁別人口",
+    "license": "CC-BY-4.0",
+    "licenseUnresolved": false
+  },
   "columns": ["町丁名", "人口", "世帯数"],
   "data": [
     { "町丁名": "本町1丁目", "人口": "1234", "世帯数": "567" }
@@ -155,7 +161,17 @@ curl -H "Authorization: Bearer odb_あなたのキー" \
 
 **CSV レスポンス**(`format=csv`)
 
-`Content-Type: text/csv` でヘッダー行を含む CSV を返します。
+`Content-Type: text/csv` でヘッダー行を含む CSV を返します。出典は本文の列構造を
+壊さないよう、レスポンスヘッダーで返します。組織名・データセット名は日本語を含むため
+**percent-encoding** されているので、利用側で `decodeURIComponent` してください。
+
+| ヘッダー | 内容 |
+| --- | --- |
+| `X-Dataset-Source-Organization` | 発行組織名(percent-encoded) |
+| `X-Dataset-Source-Name` | データセット名(percent-encoded) |
+| `X-Dataset-License` | ライセンス(percent-encoded) |
+| `X-Dataset-License-Unresolved` | `true` / `false` |
+| `X-Dataset-Version` | 版番号。版を持たないデータセットでは**ヘッダー自体を返しません** |
 
 ```bash
 # JSON
@@ -172,6 +188,22 @@ curl -H "Authorization: Bearer odb_あなたのキー" \
 `version` は返した版の情報です(版を持たないデータセットでは `null`)。
 取り込み側はこの番号を記録しておけば、`?version=N` で後から同じ内容を取り直せます。
 `version` に 1 未満や数値以外を渡すと `400`(`invalid_version`)。
+
+`source` は帰属表示に必要な出典です。メタデータを別途取得しなくても
+クレジットを保存できるよう、データ本体と同じ応答に含めています。
+
+> **取得したデータを自サイトへ複製(ミラー)する場合の注意**
+>
+> ホットリンク(参照)と異なり、複製・再配布はライセンス条件を利用側が負います。
+> `license` が `CC-BY-4.0` 等の表示義務つきライセンスの場合、`organization` と
+> `dataset` を明示したクレジットを表示してください。
+>
+> `licenseUnresolved` が `true` のデータは**ライセンスが確定していません**
+> (マージ結果で入力から自動判定できなかった状態)。再配布しないでください。
+>
+> なお、CC ライセンスは著作権のみを対象とし、**肖像権・施設管理権はカバーしません**。
+> 画像 URL 列を含むデータを複製する場合、ライセンス表記だけでは被写体の権利は
+> 担保されないため、公開前の目視確認を推奨します。
 
 ---
 

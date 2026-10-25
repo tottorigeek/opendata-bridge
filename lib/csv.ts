@@ -2,6 +2,7 @@ import "server-only";
 import { parse } from "csv-parse/sync";
 import { stringify } from "csv-stringify/sync";
 import { prisma } from "@/lib/prisma";
+import { readVersionCsv } from "@/lib/versions";
 import {
   saveDatasetCsv,
   readCsvObject,
@@ -159,16 +160,32 @@ export async function readCsvPreview(
 }
 
 /**
- * 保存済み CSV の生バイト列(ダウンロード用。常に UTF-8 で返す)。
- * 配信前に数式インジェクション対策を通すため、一度パースして組み立て直す。
+ * 保存済み CSV のバイト列を、配信用のバイト列(BOM 付き UTF-8)に変換する。
+ * 数式インジェクション対策を通すため、一度パースして組み立て直す。
+ *
+ * 最新版・過去の版のどちらのダウンロードも必ずここを通す。保存済みの実体を
+ * そのまま返すと、版を指定するだけで対策を素通りできてしまう。
  */
-export async function readCsvForDownload(datasetId: string): Promise<Buffer | null> {
-  const buffer = await readCurrentDatasetCsv(datasetId);
-  if (!buffer) return null;
+export function toDownloadCsv(buffer: Buffer): Buffer {
   // 元が Shift_JIS でも UTF-8 に正規化して配信する(BOM 付き UTF-8)
   const text = decodeCsvBuffer(buffer);
   const body = stringify(sanitizeCsvRows(parseCsvRows(text)));
   return Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(body, "utf-8")]);
+}
+
+/** 最新版の CSV を配信用のバイト列で返す。ファイルが無ければ null。 */
+export async function readCsvForDownload(datasetId: string): Promise<Buffer | null> {
+  const buffer = await readCurrentDatasetCsv(datasetId);
+  return buffer ? toDownloadCsv(buffer) : null;
+}
+
+/** 指定した版の CSV を配信用のバイト列で返す。版や実体が無ければ null。 */
+export async function readVersionCsvForDownload(
+  datasetId: string,
+  versionNumber: number,
+): Promise<Buffer | null> {
+  const buffer = await readVersionCsv(datasetId, versionNumber);
+  return buffer ? toDownloadCsv(buffer) : null;
 }
 
 /** アップロードされたバッファを storage に保存する(UTF-8 に正規化して保存)。 */

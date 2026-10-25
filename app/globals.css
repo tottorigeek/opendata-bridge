@@ -42,3 +42,53 @@ body {
   margin: 0.25rem 0 0;
   color: #94a3b8;
 }
+
+/* 地図の 1 地点(CSS で描いた丸) */
+.leaflet-marker-icon.odb-map-point {
+  border-radius: 9999px;
+  background: rgba(14, 165, 233, 0.75);
+  border: 1.5px solid #0369a1;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.7);
+}
+
+/* クラスター(まとめた地点)。件数を中央に表示する */
+.leaflet-marker-icon.odb-map-cluster {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: rgba(2, 132, 199, 0.85);
+  border: 3px solid rgba(186, 230, 253, 0.9);
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.3);
+}
+
+/* 全画面表示のボタン */
+.odb-map-fullscreen-button {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 30px;
+  text-align: center;
+  text-decoration: none;
+  color: #0f172a;
+}
+
+/* 全画面表示中は地図を画面いっぱいに広げる。
+   ブラウザの全画面 API(:fullscreen)と、使えない環境向けの固定表示の両方に効かせる */
+.odb-map-wrap:fullscreen {
+  background: #fff;
+}
+.odb-map-wrap:fullscreen > .odb-map,
+.odb-map-pseudo-fullscreen > .odb-map {
+  height: 100%;
+  border-radius: 0;
+  border: 0;
+}
+.odb-map-pseudo-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: #fff;
+}

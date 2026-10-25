@@ -120,12 +120,23 @@ export default async function DatasetDetailPage({
             {STATUS_LABEL[dataset.status]}
           </span>
         </div>
-        <Link
-          href={`/dashboard/datasets/${dataset.id}/edit`}
-          className="shrink-0 rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-        >
-          編集
-        </Link>
+        <div className="flex shrink-0 gap-2">
+          {/* 公開中なら、一般の閲覧者が見るカタログのページへ */}
+          {dataset.status === "PUBLISHED" && (
+            <Link
+              href={`/catalog/${dataset.id}`}
+              className="rounded-md border border-sky-600 bg-white px-4 py-2 text-sm font-medium text-sky-700 hover:bg-sky-50"
+            >
+              公開ページを見る
+            </Link>
+          )}
+          <Link
+            href={`/dashboard/datasets/${dataset.id}/edit`}
+            className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            編集
+          </Link>
+        </div>
       </div>
       {dataset.description && (
         <p className="mt-2 max-w-2xl whitespace-pre-wrap text-slate-600">

@@ -10,8 +10,10 @@ import {
   formatRegion,
   VISIBILITY_LABEL,
 } from "@/lib/datasets";
-import { readCsvPreview } from "@/lib/csv";
+import { readCsvTable, toCsvPreview } from "@/lib/csv";
+import { detectCoordinateColumns, toMapPoints } from "@/lib/geo";
 import CsvPreviewTable from "@/components/datasets/CsvPreviewTable";
+import DatasetMapLoader from "@/components/datasets/DatasetMapLoader";
 import LineagePanel from "@/components/datasets/LineagePanel";
 import { getLineage } from "@/lib/merge/lineage";
 
@@ -37,9 +39,15 @@ export default async function CatalogDetailPage({
   const dataset = await getCatalogDataset(id, user);
   if (!dataset) notFound();
 
-  const preview = dataset.filePath
-    ? await readCsvPreview(dataset.id, 50)
-    : { columns: [], rows: [], totalRows: 0 };
+  const table = dataset.filePath
+    ? await readCsvTable(dataset.id)
+    : { columns: [], rows: [] };
+  const preview = toCsvPreview(table, 50);
+  // 緯度・経度の列があれば地図を出し、GeoJSON でも配る。
+  const coordinateColumns = detectCoordinateColumns(table.columns);
+  const map = coordinateColumns
+    ? toMapPoints(table.columns, table.rows, coordinateColumns)
+    : null;
   const tags = parseTags(dataset.tags);
   // マージ由来のデータセットは、どの出典から作られたかを併せて示す。
   const lineage =
@@ -105,6 +113,14 @@ export default async function CatalogDetailPage({
                 className="rounded-md bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-sky-700"
               >
                 CSV をダウンロード
+              </a>
+            )}
+            {map && map.points.length > 0 && (
+              <a
+                href={`/api/datasets/${dataset.id}/download?format=geojson`}
+                className="rounded-md border border-sky-600 px-5 py-2.5 text-sm font-semibold text-sky-700 hover:bg-sky-50"
+              >
+                GeoJSON をダウンロード
               </a>
             )}
           </div>
@@ -176,6 +192,21 @@ export default async function CatalogDetailPage({
           {lineage && (
             <div className="mt-8">
               <LineagePanel lineage={lineage} linkBase="/catalog" />
+            </div>
+          )}
+
+          {map && map.points.length > 0 && (
+            <div className="mt-8">
+              <h2 className="mb-3 text-lg font-semibold text-slate-900">地図</h2>
+              <DatasetMapLoader points={map.points} />
+              <p className="mt-2 text-xs text-slate-500">
+                {map.points.length.toLocaleString("ja-JP")} 地点を表示
+                {map.skipped > 0 &&
+                  `(座標のない・読めない ${map.skipped.toLocaleString("ja-JP")} 行は除く)`}
+                {map.truncated > 0 &&
+                  `。表示上限のため ${map.truncated.toLocaleString("ja-JP")} 地点は省略`}
+                。点を選ぶと内容を表示します。背景地図: 国土地理院
+              </p>
             </div>
           )}
 

@@ -1,5 +1,6 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { SignJWT, jwtVerify } from "jose";
 import bcrypt from "bcryptjs";
@@ -124,8 +125,13 @@ export async function revokeAllUserSessions(userId: string): Promise<void> {
  * サーバー側でセッション cookie を検証し、ログイン中の User と所属 Organization を返す。
  * 未ログイン・不正トークン・ユーザー不在・失効済みセッションの場合は null。
  * 後続フェーズはこの関数でアクセス主体を取得する。
+ *
+ * 1 回の描画でヘッダーとページ本体の両方から呼ばれるため、React の cache で
+ * リクエスト内の結果を使い回す(cache は描画ごとに作り直されるので、別の
+ * リクエストやログアウト後に古い結果が返ることはない。ルートハンドラーでは
+ * 素通しになり、毎回検証する)。セッションとユーザーは 1 回の問い合わせで取る。
  */
-export async function getCurrentUser(): Promise<SessionUser | null> {
+export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE)?.value;
   if (!token) return null;
@@ -137,18 +143,16 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
     if (typeof userId !== "string" || typeof jti !== "string") return null;
 
     // 署名が有効でも、失効済み・期限切れ・台帳に無いセッションは受け付けない。
-    const session = await prisma.session.findUnique({ where: { id: jti } });
+    const session = await prisma.session.findUnique({
+      where: { id: jti },
+      include: { user: { include: { organization: true } } },
+    });
     if (!session) return null;
     if (session.userId !== userId) return null;
     if (session.revokedAt !== null) return null;
     if (session.expiresAt.getTime() <= Date.now()) return null;
-
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      include: { organization: true },
-    });
-    return user;
+    return session.user;
   } catch {
     return null;
   }
-}
+});

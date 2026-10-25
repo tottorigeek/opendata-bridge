@@ -228,8 +228,14 @@ Integration を使う場合、手動追加が必須なのは基本これだけ�
 **Deploy** を実行します。ビルドコマンド(`package.json` の `build` =
 `node scripts/migrate-deploy.mjs && next build`)が、注入変数・手動変数のどちらからでも
 接続 URL を解決し、ビルド時に `prisma/migrations` の初期マイグレーションを
-直接続(`DIRECT_URL` / `POSTGRES_URL_NON_POOLING`)経由で適用します(`vercel.json` は不要)。
+直接続(`DIRECT_URL` / `POSTGRES_URL_NON_POOLING`)経由で適用します。
 以降は GitHub への push で自動再デプロイされます。
+
+> **関数のリージョンは DB と同じ地域にしてください。** [vercel.json](vercel.json) の
+> `regions` で `hnd1`(東京)を指定しています。Vercel の既定は米国東部(`iad1`)で、
+> 東京の Supabase と組み合わせると DB への問い合わせのたびに太平洋を往復し、
+> DB を使うページの表示が 1〜2 秒遅くなります。Supabase を別リージョンに作った場合は、
+> `regions` をそのリージョンに近い値([一覧](https://vercel.com/docs/edge-network/regions))に変えてください。
 
 ### 6. 初期データ(シード)の投入
 

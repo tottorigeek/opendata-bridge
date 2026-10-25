@@ -164,6 +164,44 @@ export function parseRegionInput(
   return { prefecture, municipality };
 }
 
+const MAX_ATTRIBUTION_LENGTH = 200;
+const MAX_ATTRIBUTION_URL_LENGTH = 500;
+
+/**
+ * 出典(attribution / attributionUrl)のフォーム入力を検証して正規化する。
+ *
+ * URL は公開ページでリンクにするため http / https だけを受け付ける
+ * (javascript: などを通すと、閲覧者がクリックしたときにスクリプトが動く)。
+ * URL だけあって名前が無い入力は、帰属表示として意味を成さないので弾く。
+ */
+export function parseAttributionInput(
+  attributionRaw: unknown,
+  urlRaw: unknown,
+): { attribution: string; attributionUrl: string } | { error: string } {
+  const attribution = String(attributionRaw ?? "").trim();
+  const attributionUrl = String(urlRaw ?? "").trim();
+  if (attribution.length > MAX_ATTRIBUTION_LENGTH) {
+    return { error: `出典は ${MAX_ATTRIBUTION_LENGTH} 文字以内で入力してください。` };
+  }
+  if (!attributionUrl) return { attribution, attributionUrl: "" };
+  if (!attribution) {
+    return { error: "出典の URL を入れる場合は、出典の名前も入力してください。" };
+  }
+  if (attributionUrl.length > MAX_ATTRIBUTION_URL_LENGTH) {
+    return { error: `出典の URL は ${MAX_ATTRIBUTION_URL_LENGTH} 文字以内で入力してください。` };
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(attributionUrl);
+  } catch {
+    return { error: "出典の URL の形式が正しくありません。" };
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    return { error: "出典の URL は http または https で始まるものにしてください。" };
+  }
+  return { attribution, attributionUrl: parsed.toString() };
+}
+
 // ---- 認可ヘルパー -----------------------------------------------------------
 
 /**

@@ -100,6 +100,23 @@ export default async function CatalogDetailPage({
               {dataset.organization.name}
             </Link>
           </p>
+          {dataset.attribution && (
+            <p className="mt-0.5 text-sm text-slate-500">
+              出典:{" "}
+              {dataset.attributionUrl ? (
+                <a
+                  href={dataset.attributionUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium text-sky-700 hover:underline"
+                >
+                  {dataset.attribution}
+                </a>
+              ) : (
+                <span className="font-medium text-slate-700">{dataset.attribution}</span>
+              )}
+            </p>
+          )}
           {dataset.description && (
             <p className="mt-4 max-w-3xl whitespace-pre-wrap text-slate-700">
               {dataset.description}

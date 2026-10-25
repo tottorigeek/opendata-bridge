@@ -7,6 +7,7 @@ import {
   isVisibility,
   getOwnedDataset,
   parseRegionInput,
+  parseAttributionInput,
 } from "@/lib/datasets";
 import { extractCsvMeta, deleteCsvFile } from "@/lib/csv";
 import { createDatasetVersion } from "@/lib/versions";
@@ -52,6 +53,11 @@ export async function PATCH(
   if (!isVisibility(visibility)) {
     return NextResponse.json({ error: "公開範囲が不正です。" }, { status: 400 });
   }
+  // 出典もフォームが常に送るため、空欄は「解除」として保存する。
+  const credit = parseAttributionInput(form.get("attribution"), form.get("attributionUrl"));
+  if ("error" in credit) {
+    return NextResponse.json({ error: credit.error }, { status: 400 });
+  }
 
   // 対象地域はフォームが常に送るため、未選択は「解除」として null を書き込む。
   const region = parseRegionInput(
@@ -68,6 +74,8 @@ export async function PATCH(
     updateFrequency: string;
     prefecture: string | null;
     municipality: string | null;
+    attribution: string;
+    attributionUrl: string;
     licenseUnresolved: boolean;
     columnsJson?: string;
     rowCount?: number;
@@ -81,6 +89,8 @@ export async function PATCH(
     updateFrequency,
     prefecture: region.prefecture,
     municipality: region.municipality,
+    attribution: credit.attribution,
+    attributionUrl: credit.attributionUrl,
     // フォームはライセンスを必ず送るため、保存できた時点で人が値を確認したとみなし
     // 未確定フラグを解除する(マージ結果の未確定状態はここで解消される)。
     licenseUnresolved: false,

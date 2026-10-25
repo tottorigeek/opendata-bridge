@@ -98,6 +98,8 @@ API キー単位で **60 秒あたり 600 リクエスト**までです。超過
       "updateFrequency": "年次",
       "sourceType": "UPLOADED",
       "organization": { "name": "サンプル市", "type": "GOVERNMENT" },
+      "attribution": "",
+      "attributionUrl": "",
       "createdAt": "2026-07-08T00:00:00.000Z",
       "updatedAt": "2026-07-08T00:00:00.000Z"
     }
@@ -148,6 +150,8 @@ curl -H "Authorization: Bearer odb_あなたのキー" \
   "source": {
     "organization": "鳥取県",
     "dataset": "町丁別人口",
+    "attribution": "",
+    "attributionUrl": "",
     "license": "CC-BY-4.0",
     "licenseUnresolved": false
   },
@@ -172,6 +176,8 @@ curl -H "Authorization: Bearer odb_あなたのキー" \
 | `X-Dataset-License` | ライセンス(percent-encoded) |
 | `X-Dataset-License-Unresolved` | `true` / `false` |
 | `X-Dataset-Version` | 版番号。版を持たないデータセットでは**ヘッダー自体を返しません** |
+| `X-Dataset-Attribution` | 出典(元データの作成者。percent-encoded)。設定されているときだけ返します |
+| `X-Dataset-Attribution-Url` | 出典の URL(percent-encoded)。設定されているときだけ返します |
 
 ```bash
 # JSON
@@ -189,7 +195,10 @@ curl -H "Authorization: Bearer odb_あなたのキー" \
 取り込み側はこの番号を記録しておけば、`?version=N` で後から同じ内容を取り直せます。
 `version` に 1 未満や数値以外を渡すと `400`(`invalid_version`)。
 
-`source` は帰属表示に必要な出典です。メタデータを別途取得しなくても
+`source` は帰属表示に必要な出典です。`attribution` は**元データの作成者**で、提供組織
+(`organization`)が自ら作ったのではないデータ(個人が作成したデータを組織が整形して登録した場合など)で
+設定されます。帰属表示では `organization` より先に `attribution` を示してください。空なら提供組織が作成者です。
+メタデータを別途取得しなくても
 クレジットを保存できるよう、データ本体と同じ応答に含めています。
 
 > **取得したデータを自サイトへ複製(ミラー)する場合の注意**

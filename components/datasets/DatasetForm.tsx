@@ -144,7 +144,7 @@ export default function DatasetForm({
 
       <div className="grid gap-5 sm:grid-cols-2">
         <div>
-          <label className={labelClass}>出典(元データの作成者)</label>
+          <label className={labelClass}>出典</label>
           <input
             name="attribution"
             maxLength={200}
@@ -165,9 +165,10 @@ export default function DatasetForm({
           />
         </div>
         <p className="-mt-3 text-xs text-slate-500 sm:col-span-2">
-          自組織で作ったのではないデータ(個人や他団体が作成・公開したものを整形した場合など)は、
-          元の作成者を入れてください。カタログと API で提供組織と並べて表示し、
-          ライセンスの帰属表示に使われます。自組織で作ったデータなら空欄のままで構いません。
+          自組織が持つデータではない場合(他のサイトや団体が公開しているイベント情報を転載した、
+          個人が作成したデータを整形した、など)は、元の作成者や掲載元を自由に記入してください。
+          カタログと API で提供組織と並べて表示し、ライセンスの帰属表示に使われます。
+          自組織で作ったデータなら空欄のままで構いません。
         </p>
       </div>
 

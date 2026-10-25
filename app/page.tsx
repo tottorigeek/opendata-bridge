@@ -1,10 +1,17 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import SiteHeader from "@/components/SiteHeader";
+import { baseOpenGraph } from "@/lib/site-metadata";
 
-export const metadata = {
-  title: "OpenData Bridge — 行政と民間のデータが、出会う場所。",
-  description:
-    "官民共存型オープンデータ管理システム。行政・民間が双方向にデータを持ち寄り、住所などの表記ゆれを自動で名寄せ・マージし、カタログと REST API で利活用できる基盤です。",
+const TITLE = "OpenData Bridge — 行政と民間のデータが、出会う場所。";
+const DESCRIPTION =
+  "官民共存型オープンデータ管理システム。行政・民間が双方向にデータを持ち寄り、住所などの表記ゆれを自動で名寄せ・マージし、カタログと REST API で利活用できる基盤です。";
+
+export const metadata: Metadata = {
+  title: TITLE,
+  description: DESCRIPTION,
+  alternates: { canonical: "/" },
+  openGraph: { ...baseOpenGraph, title: TITLE, description: DESCRIPTION, url: "/" },
 };
 
 /** 特徴カード用のアイコン(依存を増やさないインライン SVG)。 */
@@ -55,12 +62,12 @@ export default function Home() {
     {
       variant: "merge" as const,
       title: "類似データの名寄せ・マージ",
-      body: "「一丁目2番3号」と「1-2-3」、都道府県の有無や漢数字といった住所の表記ゆれを自動で吸収。異なる組織のデータをキー結合し、新しいデータセットを生成します。",
+      body: "「一丁目2番3号」と「1-2-3」、都道府県の有無や漢数字といった住所の表記ゆれを自動で吸収。異なる組織のデータをキー結合し、出典と版を記録した新しいデータセットを生成します。元データが更新されれば、マージ結果も追従できます。",
     },
     {
       variant: "api" as const,
       title: "REST API で開発者がすぐ使える",
-      body: "API キーを発行するだけで、公開データセットの一覧・メタデータ・本体を JSON / CSV で取得可能。利用量も自動で計測されます。",
+      body: "API キーを発行するだけで、公開データセットの一覧・メタデータ・本体を JSON / CSV で取得可能。緯度・経度を持つデータは地図で確認でき、GeoJSON でも配布します。",
     },
   ];
 
@@ -100,7 +107,7 @@ export default function Home() {
       points: [
         "Bearer トークン方式のシンプルな REST API",
         "一覧・メタデータ・本体(JSON / CSV)を取得",
-        "表記ゆれ正規化済みのデータで前処理を削減",
+        "出典・ライセンス・版の情報がデータ本体と一緒に届く",
       ],
     },
   ];
@@ -116,15 +123,18 @@ export default function Home() {
               <p className="mb-4 inline-block rounded-full bg-sky-100 px-3 py-1 text-xs font-semibold text-sky-700">
                 官民共存型オープンデータ基盤
               </p>
-              <h1 className="text-4xl font-bold leading-tight tracking-tight text-slate-900 sm:text-5xl">
-                行政と民間のデータが、
+              {/* 日本語は任意の文字間で折り返されるため、「データ / が、」のように助詞だけが
+                  次の行に残る。break-keep で文節の途中では折らず、<wbr /> の位置だけで折る。 */}
+              <h1 className="break-keep text-4xl font-bold leading-tight tracking-tight text-slate-900 sm:text-5xl">
+                行政と民間の
+                <wbr />
+                データが、
                 <br />
                 出会う場所。
               </h1>
+              {/* JSX の改行は空白として出るため、日本語の文は 1 つの文字列で書く。 */}
               <p className="mt-6 max-w-xl text-lg leading-relaxed text-slate-600">
-                OpenData Bridge は、行政・民間の双方がデータを持ち寄り、住所などの
-                表記ゆれを自動で名寄せ・マージして、カタログと REST API で
-                利活用するためのオープンデータ管理システムです。
+                {"OpenData Bridge は、行政・民間の双方がデータを持ち寄り、住所などの表記ゆれを自動で名寄せ・マージして、カタログと REST API で利活用するためのオープンデータ管理システムです。"}
               </p>
               <div className="mt-10 flex flex-wrap gap-4">
                 <Link
@@ -278,6 +288,24 @@ export default function Home() {
           </div>
         </section>
 
+        {/* オープンソース(/about と同じ文言) */}
+        <section className="bg-slate-900">
+          <div className="mx-auto max-w-4xl px-4 py-16 text-center">
+            <h2 className="text-2xl font-bold tracking-tight text-white">
+              オープンソースです
+            </h2>
+            <p className="mx-auto mt-4 max-w-2xl text-slate-300">
+              {"AGPL-3.0 で公開しており、自組織のサーバーで動かせます。提供者が撤退しても運用を続けられることは、公共のデータ基盤にとって重要な条件だと考えています。"}
+            </p>
+            <a
+              href="https://github.com/tottorigeek/opendata-bridge"
+              className="mt-8 inline-block rounded-md bg-white px-6 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-100"
+            >
+              GitHub でソースを見る
+            </a>
+          </div>
+        </section>
+
         {/* CTA 帯 */}
         <section className="border-t border-slate-200 bg-sky-600">
           <div className="mx-auto flex max-w-6xl flex-col items-center gap-6 px-4 py-16 text-center">
@@ -313,18 +341,21 @@ export default function Home() {
             </span>
             <span className="font-semibold text-slate-700">OpenData Bridge</span>
           </div>
-          <nav className="flex gap-4">
+          <nav className="flex flex-wrap justify-center gap-x-4 gap-y-1">
+            <Link href="/about" className="hover:text-slate-700">
+              サービス紹介
+            </Link>
             <Link href="/catalog" className="hover:text-slate-700">
               カタログ
             </Link>
-            <Link href="/dashboard" className="hover:text-slate-700">
-              ダッシュボード
+            <Link href="/organizations" className="hover:text-slate-700">
+              組織
             </Link>
-            <Link href="/login" className="hover:text-slate-700">
-              ログイン
-            </Link>
+            <a href="https://github.com/tottorigeek/opendata-bridge" className="hover:text-slate-700">
+              GitHub
+            </a>
           </nav>
-          <span>© OpenData Bridge</span>
+          <span>© OpenData Bridge · AGPL-3.0</span>
         </div>
       </footer>
     </>

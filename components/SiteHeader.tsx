@@ -21,39 +21,43 @@ export default async function SiteHeader() {
         <nav className="flex flex-wrap items-center gap-1 text-sm font-medium text-slate-600">
           <Link
             href="/about"
-            className="rounded-md px-3 py-2 hover:bg-slate-100 hover:text-slate-900"
+            className="rounded-md px-2 py-2 hover:bg-slate-100 hover:text-slate-900 sm:px-3"
           >
             サービス紹介
           </Link>
           <Link
             href="/catalog"
-            className="rounded-md px-3 py-2 hover:bg-slate-100 hover:text-slate-900"
+            className="rounded-md px-2 py-2 hover:bg-slate-100 hover:text-slate-900 sm:px-3"
           >
             カタログ
           </Link>
           <Link
             href="/organizations"
-            className="rounded-md px-3 py-2 hover:bg-slate-100 hover:text-slate-900"
+            className="rounded-md px-2 py-2 hover:bg-slate-100 hover:text-slate-900 sm:px-3"
           >
             組織
           </Link>
-          <Link
-            href="/dashboard"
-            className="rounded-md px-3 py-2 hover:bg-slate-100 hover:text-slate-900"
-          >
-            ダッシュボード
-          </Link>
+          {/* 未ログインでダッシュボードを開くとログイン画面に飛ぶだけなので、
+              「ログイン」と重複するリンクは出さない(狭い画面でメニューが 2 段になる原因でもある)。 */}
+          {user && (
+            <Link
+              href="/dashboard"
+              className="rounded-md px-2 py-2 hover:bg-slate-100 hover:text-slate-900 sm:px-3"
+            >
+              ダッシュボード
+            </Link>
+          )}
           {user ? (
             <Link
               href="/dashboard"
-              className="ml-2 rounded-md bg-sky-600 px-4 py-2 text-white hover:bg-sky-700"
+              className="ml-1 rounded-md bg-sky-600 px-3 py-2 text-white hover:bg-sky-700 sm:ml-2 sm:px-4"
             >
               {user.name} さん
             </Link>
           ) : (
             <Link
               href="/login"
-              className="ml-2 rounded-md bg-sky-600 px-4 py-2 text-white hover:bg-sky-700"
+              className="ml-1 rounded-md bg-sky-600 px-3 py-2 text-white hover:bg-sky-700 sm:ml-2 sm:px-4"
             >
               ログイン
             </Link>

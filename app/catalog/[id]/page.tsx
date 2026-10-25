@@ -140,6 +140,15 @@ export default async function CatalogDetailPage({
                 GeoJSON をダウンロード
               </a>
             )}
+            {/* 自組織のデータをカタログから開いたときの編集の入口(管理画面と同じ編集画面へ) */}
+            {user?.organizationId === dataset.organizationId && (
+              <Link
+                href={`/dashboard/datasets/${dataset.id}/edit`}
+                className="rounded-md border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                編集
+              </Link>
+            )}
           </div>
 
           {/* メタデータ */}

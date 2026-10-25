@@ -17,6 +17,8 @@ export interface DatasetCardItem {
   updatedAt: Date;
   prefecture: string | null;
   municipality: string | null;
+  /** 出典(元データの作成者)。空なら提供組織が作成者。 */
+  attribution: string;
   organization: {
     id: string;
     name: string;
@@ -89,7 +91,14 @@ export default function DatasetCard({
         ))}
       </div>
       <div className="mt-3 flex items-center justify-between text-xs text-slate-400">
-        <span>{showOrganization ? dataset.organization.name : ""}</span>
+        <span>
+          {showOrganization ? dataset.organization.name : ""}
+          {dataset.attribution && (
+            <>
+              {showOrganization ? " · " : ""}出典: {dataset.attribution}
+            </>
+          )}
+        </span>
         <span>
           {dataset.rowCount.toLocaleString("ja-JP")} 行 · {formatDate(dataset.updatedAt)}
         </span>

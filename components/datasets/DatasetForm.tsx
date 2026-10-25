@@ -36,6 +36,9 @@ export interface DatasetFormInitial {
   hasFile: boolean;
   prefecture: string | null;
   municipality: string | null;
+  /** 出典(元データの作成者・転載元)と、その参照先 URL。 */
+  attribution: string;
+  attributionUrl: string;
   /** マージ結果でライセンスを自動判定できなかった状態。 */
   licenseUnresolved: boolean;
 }
@@ -137,6 +140,35 @@ export default function DatasetForm({
           placeholder="データの概要・出典・利用上の注意などを記載します。"
           className={inputClass}
         />
+      </div>
+
+      <div className="grid gap-5 sm:grid-cols-2">
+        <div>
+          <label className={labelClass}>出典(元データの作成者)</label>
+          <input
+            name="attribution"
+            maxLength={200}
+            defaultValue={initial?.attribution ?? ""}
+            placeholder="例: 柳大地 / 鳥取県(とっとりイベントナビ)"
+            className={inputClass}
+          />
+        </div>
+        <div>
+          <label className={labelClass}>出典の URL</label>
+          <input
+            name="attributionUrl"
+            type="url"
+            maxLength={500}
+            defaultValue={initial?.attributionUrl ?? ""}
+            placeholder="https://..."
+            className={inputClass}
+          />
+        </div>
+        <p className="-mt-3 text-xs text-slate-500 sm:col-span-2">
+          自組織で作ったのではないデータ(個人や他団体が作成・公開したものを整形した場合など)は、
+          元の作成者を入れてください。カタログと API で提供組織と並べて表示し、
+          ライセンスの帰属表示に使われます。自組織で作ったデータなら空欄のままで構いません。
+        </p>
       </div>
 
       {initial?.licenseUnresolved && (

@@ -6,6 +6,7 @@ import {
   parseTags,
   isVisibility,
   parseRegionInput,
+  parseAttributionInput,
 } from "@/lib/datasets";
 import { extractCsvMeta } from "@/lib/csv";
 import { createDatasetVersion } from "@/lib/versions";
@@ -43,6 +44,10 @@ export async function POST(request: Request) {
   }
   if (!isVisibility(visibility)) {
     return NextResponse.json({ error: "公開範囲が不正です。" }, { status: 400 });
+  }
+  const credit = parseAttributionInput(form.get("attribution"), form.get("attributionUrl"));
+  if ("error" in credit) {
+    return NextResponse.json({ error: credit.error }, { status: 400 });
   }
 
   // CSV ファイル(任意)
@@ -93,6 +98,8 @@ export async function POST(request: Request) {
       filePath: null,
       prefecture: region.prefecture,
       municipality: region.municipality,
+      attribution: credit.attribution,
+      attributionUrl: credit.attributionUrl,
       organizationId: user.organizationId,
     },
   });

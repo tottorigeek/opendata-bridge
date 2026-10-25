@@ -81,6 +81,13 @@ export async function GET(
     // 版を持たない旧データでは version が null。その場合はヘッダー自体を出さない
     // (空値を返すと「第 0 版」等と誤解されうるため)。
     if (version) headers["X-Dataset-Version"] = String(version.number);
+    // 出典(元データの作成者)は設定されているときだけ出す。
+    if (source.attribution) {
+      headers["X-Dataset-Attribution"] = encodeURIComponent(source.attribution);
+      if (source.attributionUrl) {
+        headers["X-Dataset-Attribution-Url"] = encodeURIComponent(source.attributionUrl);
+      }
+    }
     return new NextResponse(body, { status: 200, headers });
   }
 

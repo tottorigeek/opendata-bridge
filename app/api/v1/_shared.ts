@@ -51,10 +51,15 @@ export function parseColumns(columnsJson: string): string[] {
  * licenseUnresolved が true のデータはライセンスが確定していない
  * (マージ結果で入力から自動判定できなかった)。この状態のデータを
  * 再配布してはいけないので、取り込み側が判断できるよう明示する。
+ *
+ * attribution は元データの作成者(提供組織が自ら作ったのではない場合)。
+ * 帰属表示では organization より先にこちらを示す。空なら提供組織が作成者。
  */
 export type DatasetSource = {
   organization: string;
   dataset: string;
+  attribution: string;
+  attributionUrl: string;
   license: string;
   licenseUnresolved: boolean;
 };
@@ -64,6 +69,8 @@ export function datasetSource(ds: DatasetWithOrg): DatasetSource {
   return {
     organization: ds.organization.name,
     dataset: ds.title,
+    attribution: ds.attribution,
+    attributionUrl: ds.attributionUrl,
     license: ds.license,
     licenseUnresolved: ds.licenseUnresolved,
   };
@@ -87,6 +94,8 @@ export function serializeDataset(ds: DatasetWithOrg) {
       name: ds.organization.name,
       type: ds.organization.type,
     },
+    attribution: ds.attribution,
+    attributionUrl: ds.attributionUrl,
     createdAt: ds.createdAt.toISOString(),
     updatedAt: ds.updatedAt.toISOString(),
   };

@@ -248,6 +248,12 @@ model Dataset {
   /// 自動判定できなかったときに true になる。true の間は公開申請を通さない
   /// (docs/design/merge-design.md §3-2)。
   licenseUnresolved Boolean     @default(false)
+  /// 出典(元データの作成者・転載元)。提供組織が自ら作ったのではないデータで、
+  /// ライセンスの帰属表示に使う名前(例: 個人が作成したデータを組織が整形して登録した場合)。
+  /// 空なら提供組織自身が作成したものとして扱う。
+  attribution     String        @default("")
+  /// 出典の参照先 URL(http / https のみ)。空可。
+  attributionUrl  String        @default("")
   organizationId  String
   organization    Organization  @relation(fields: [organizationId], references: [id])
   /// 外部 API から取り込む場合の接続設定(sourceType = API のとき設定される)。

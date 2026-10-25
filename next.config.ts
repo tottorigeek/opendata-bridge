@@ -13,6 +13,9 @@ const isDev = process.env.NODE_ENV === "development";
  * それ以外(外部スクリプト読み込み・iframe 埋め込み・base 差し替え・
  * 外部へのフォーム送信)は塞ぐ構成にしている。
  *
+ * 画像だけは国土地理院のタイル配信元を許可する(データセットの地図の背景)。
+ * 許可するのは img-src のみで、スクリプトや通信先は増やさない。
+ *
  * 開発時のみ:
  *  - 'unsafe-eval' … React がエラースタック復元に eval を使う
  *  - upgrade-insecure-requests を外す … http://localhost が https へ強制されるのを防ぐ
@@ -21,7 +24,7 @@ const cspDirectives = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' blob: data:",
+  "img-src 'self' blob: data: https://cyberjapandata.gsi.go.jp",
   "font-src 'self'",
   "connect-src 'self'",
   "object-src 'none'",

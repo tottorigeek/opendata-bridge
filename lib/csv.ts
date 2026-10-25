@@ -132,6 +132,33 @@ export async function readCurrentDatasetCsv(
   return readCsvObject(key);
 }
 
+export type CsvTable = { columns: string[]; rows: string[][] };
+
+/** CSV のバイト列をヘッダーとデータ行に分ける。空なら列も行も空。 */
+export function bufferToCsvTable(buffer: Buffer): CsvTable {
+  const rows = parseCsvRows(decodeCsvBuffer(buffer));
+  if (rows.length === 0) return { columns: [], rows: [] };
+  return { columns: rows[0].map((c) => c.trim()), rows: rows.slice(1) };
+}
+
+/**
+ * 保存済み CSV の全行をヘッダーとデータ行に分けて返す。
+ * ファイルが存在しない場合は列も行も空。
+ */
+export async function readCsvTable(datasetId: string): Promise<CsvTable> {
+  const buffer = await readCurrentDatasetCsv(datasetId);
+  return buffer ? bufferToCsvTable(buffer) : { columns: [], rows: [] };
+}
+
+/** 読み込み済みの表から、先頭 N 行(既定 50)のプレビューを作る。 */
+export function toCsvPreview(table: CsvTable, limit = 50): CsvPreview {
+  return {
+    columns: table.columns,
+    rows: table.rows.slice(0, limit),
+    totalRows: table.rows.length,
+  };
+}
+
 /**
  * 保存済み CSV ファイルの先頭 N 行(既定 50)を読み出してプレビュー用に返す。
  * ファイルが存在しない場合は空プレビューを返す。
@@ -140,22 +167,7 @@ export async function readCsvPreview(
   datasetId: string,
   limit = 50,
 ): Promise<CsvPreview> {
-  const buffer = await readCurrentDatasetCsv(datasetId);
-  if (!buffer) {
-    return { columns: [], rows: [], totalRows: 0 };
-  }
-  const content = decodeCsvBuffer(buffer);
-  const rows = parseCsvRows(content);
-  if (rows.length === 0) {
-    return { columns: [], rows: [], totalRows: 0 };
-  }
-  const columns = rows[0].map((c) => c.trim());
-  const dataRows = rows.slice(1);
-  return {
-    columns,
-    rows: dataRows.slice(0, limit),
-    totalRows: dataRows.length,
-  };
+  return toCsvPreview(await readCsvTable(datasetId), limit);
 }
 
 /**

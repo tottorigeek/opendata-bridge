@@ -21,7 +21,8 @@ export const metadata: Metadata = {
   description:
     "官民共存型オープンデータ管理システム — 行政と民間がデータを持ち寄り、名寄せ・マージして利活用する基盤。",
   openGraph: baseOpenGraph,
-  twitter: { card: "summary" },
+  // OGP 画像(opengraph-image.tsx)は横長なので、大きな画像のカードで出す。
+  twitter: { card: "summary_large_image" },
 };
 
 export default function RootLayout({

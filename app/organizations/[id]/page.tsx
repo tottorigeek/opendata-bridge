@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import SiteHeader from "@/components/SiteHeader";
@@ -5,8 +6,29 @@ import DatasetCard from "@/components/datasets/DatasetCard";
 import { getCurrentUser } from "@/lib/auth";
 import { listCatalogDatasets, orgTypeBadge, formatRegion, ORG_TYPE_LABEL } from "@/lib/datasets";
 import { getOrganization, isMemberOf } from "@/lib/organizations";
+import { baseOpenGraph } from "@/lib/site-metadata";
 
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  const organization = await getOrganization(id);
+  if (!organization) return { title: "組織が見つかりません — OpenData Bridge" };
+
+  const title = `${organization.name} — OpenData Bridge`;
+  const description = `${organization.name}(${ORG_TYPE_LABEL[organization.type] ?? "組織"})が OpenData Bridge で公開しているデータの一覧です。`;
+  // OGP 画像は同じ階層の opengraph-image.tsx が自動で付ける。
+  return {
+    title,
+    description,
+    alternates: { canonical: `/organizations/${organization.id}` },
+    openGraph: { ...baseOpenGraph, title, description, url: `/organizations/${organization.id}` },
+  };
+}
 
 export default async function OrganizationProfilePage({
   params,

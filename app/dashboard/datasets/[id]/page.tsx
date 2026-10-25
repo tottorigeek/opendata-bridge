@@ -107,31 +107,31 @@ export default async function DatasetDetailPage({
         <span className="text-slate-700">{dataset.title}</span>
       </nav>
 
-      <div className="mt-2 flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-slate-900">{dataset.title}</h1>
-            <span
-              className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                STATUS_BADGE_CLASS[dataset.status]
-              }`}
-            >
-              {STATUS_LABEL[dataset.status]}
-            </span>
-          </div>
-          {dataset.description && (
-            <p className="mt-2 max-w-2xl whitespace-pre-wrap text-slate-600">
-              {dataset.description}
-            </p>
-          )}
+      {/* 編集ボタンはタイトルと同じ行に固定する。説明文と同じ行に置くと、
+          説明文が長いときにボタンが説明文の下まで押し下げられて見つからなくなる。 */}
+      <div className="mt-2 flex items-start justify-between gap-4">
+        <div className="flex min-w-0 flex-wrap items-center gap-3">
+          <h1 className="text-2xl font-bold text-slate-900">{dataset.title}</h1>
+          <span
+            className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
+              STATUS_BADGE_CLASS[dataset.status]
+            }`}
+          >
+            {STATUS_LABEL[dataset.status]}
+          </span>
         </div>
         <Link
           href={`/dashboard/datasets/${dataset.id}/edit`}
-          className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          className="shrink-0 rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
         >
           編集
         </Link>
       </div>
+      {dataset.description && (
+        <p className="mt-2 max-w-2xl whitespace-pre-wrap text-slate-600">
+          {dataset.description}
+        </p>
+      )}
 
       {dataset.status === "REJECTED" && (
         <div className="mt-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

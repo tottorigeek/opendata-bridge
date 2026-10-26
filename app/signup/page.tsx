@@ -3,6 +3,11 @@ import { redirect } from "next/navigation";
 import SiteHeader from "@/components/SiteHeader";
 import { getCurrentUser } from "@/lib/auth";
 import SignupForm from "./SignupForm";
+import type { Metadata } from "next";
+import { noIndex } from "@/lib/site-metadata";
+
+// 個人ごとの手続きの画面なので検索結果には出さない
+export const metadata: Metadata = { title: "新規登録 — OpenData Bridge", robots: noIndex };
 
 export default async function SignupPage() {
   const user = await getCurrentUser();

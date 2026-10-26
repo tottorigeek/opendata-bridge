@@ -12,8 +12,22 @@ import {
   isValidPrefecture,
   municipalitiesOf,
 } from "@/lib/regions";
+import type { Metadata } from "next";
+import { baseOpenGraph } from "@/lib/site-metadata";
 
 export const dynamic = "force-dynamic";
+
+const CATALOG_TITLE = "公開データカタログ — OpenData Bridge";
+const CATALOG_DESCRIPTION =
+  "行政・民間が公開したオープンデータを、キーワード・組織種別・地域(都道府県 / 市区町村)で横断検索できます。CSV・GeoJSON・REST API で取得できます。";
+
+export const metadata: Metadata = {
+  title: CATALOG_TITLE,
+  description: CATALOG_DESCRIPTION,
+  // 検索条件つきの URL(?q= など)は同じ一覧の絞り込みなので、正規 URL は一覧そのものにまとめる
+  alternates: { canonical: "/catalog" },
+  openGraph: { ...baseOpenGraph, title: CATALOG_TITLE, description: CATALOG_DESCRIPTION, url: "/catalog" },
+};
 
 export default async function CatalogPage({
   searchParams,

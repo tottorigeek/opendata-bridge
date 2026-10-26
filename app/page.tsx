@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import SiteHeader from "@/components/SiteHeader";
 import { baseOpenGraph } from "@/lib/site-metadata";
+import { toJsonLdScript, websiteJsonLd } from "@/lib/structured-data";
 
 const TITLE = "OpenData Bridge — 行政と民間のデータが、出会う場所。";
 const DESCRIPTION =
@@ -114,6 +115,11 @@ export default function Home() {
 
   return (
     <>
+      {/* 検索エンジン向けの構造化データ(サイト名とカタログ検索の入口)。中身は固定値 */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: toJsonLdScript(websiteJsonLd()) }}
+      />
       <SiteHeader />
       <main className="flex-1">
         {/* ヒーロー */}

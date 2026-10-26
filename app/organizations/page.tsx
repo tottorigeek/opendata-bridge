@@ -2,8 +2,20 @@ import Link from "next/link";
 import SiteHeader from "@/components/SiteHeader";
 import { orgTypeBadge, formatRegion } from "@/lib/datasets";
 import { listOrganizations } from "@/lib/organizations";
+import type { Metadata } from "next";
+import { baseOpenGraph } from "@/lib/site-metadata";
 
 export const dynamic = "force-dynamic";
+
+const ORGS_TITLE = "組織一覧 — OpenData Bridge";
+const ORGS_DESCRIPTION = "OpenData Bridge にデータを持ち寄っている行政・民間の組織の一覧です。";
+
+export const metadata: Metadata = {
+  title: ORGS_TITLE,
+  description: ORGS_DESCRIPTION,
+  alternates: { canonical: "/organizations" },
+  openGraph: { ...baseOpenGraph, title: ORGS_TITLE, description: ORGS_DESCRIPTION, url: "/organizations" },
+};
 
 export default async function OrganizationsPage() {
   const organizations = await listOrganizations();

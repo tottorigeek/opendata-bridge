@@ -1,19 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { baseOpenGraph } from "@/lib/site-metadata";
-
-/**
- * 正規 URL・OGP の絶対 URL の基準。
- * SITE_URL(例: https://opendata-bridge.vercel.app)を優先し、未設定なら Vercel が注入する
- * 本番ドメインを使う。セルフホストでは SITE_URL を設定する。
- */
-function siteUrl(): URL {
-  const explicit = process.env.SITE_URL?.trim();
-  if (explicit) return new URL(explicit);
-  const vercel = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
-  if (vercel) return new URL(`https://${vercel}`);
-  return new URL("http://localhost:3000");
-}
+import { baseOpenGraph, siteUrl } from "@/lib/site-metadata";
 
 export const metadata: Metadata = {
   metadataBase: siteUrl(),

@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
+import { toAccountSummary } from "@/lib/account";
+import AccountMenu from "@/components/AccountMenu";
 
 /** 公開ページ用の共通ヘッダー。ログイン状態に応じてナビを切り替える。 */
 export default async function SiteHeader() {
@@ -48,12 +50,8 @@ export default async function SiteHeader() {
             </Link>
           )}
           {user ? (
-            <Link
-              href="/dashboard"
-              className="ml-1 rounded-md bg-sky-600 px-3 py-2 text-white hover:bg-sky-700 sm:ml-2 sm:px-4"
-            >
-              {user.name} さん
-            </Link>
+            // ログイン後は「ログイン」の代わりに、アカウント情報とメニューを開くボタンを出す
+            <AccountMenu account={toAccountSummary(user)} />
           ) : (
             <Link
               href="/login"

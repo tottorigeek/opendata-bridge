@@ -2,6 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import DashboardSidebar from "@/components/DashboardSidebar";
+import AccountMenu from "@/components/AccountMenu";
+import { toAccountSummary } from "@/lib/account";
 import { countUnread } from "@/lib/notifications";
 import type { Metadata } from "next";
 import { noIndex } from "@/lib/site-metadata";
@@ -44,12 +46,8 @@ export default async function DashboardLayout({
               公開ページ ↗
             </Link>
           </div>
-          <div className="text-sm text-slate-700">
-            {user.name}
-            <span className="ml-2 rounded-full bg-sky-100 px-2 py-0.5 text-xs text-sky-700">
-              {user.role}
-            </span>
-          </div>
+          {/* 公開ページのヘッダーと同じアカウントメニュー(アカウント情報・設定・ログアウト) */}
+          <AccountMenu account={toAccountSummary(user)} />
         </header>
         <main className="flex-1 p-6">{children}</main>
       </div>

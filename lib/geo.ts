@@ -138,3 +138,27 @@ export function toGeoJson(columns: string[], rows: string[][], cols: CoordinateC
   }
   return { type: "FeatureCollection" as const, features };
 }
+
+/** 地図の表示範囲(南西と北東の角)。 */
+export type CoordinateBounds = [[number, number], [number, number]];
+
+/**
+ * 最初に表示する範囲を、点が集まっている部分に合わせて求める。
+ *
+ * 全点の外接矩形に合わせると、遠く離れた数件(県外の会場など)のせいで地図が引きすぎ、
+ * 大半の点が 1 つのクラスターに潰れてしまう。そこで点が多いときは、緯度・経度それぞれ
+ * 両端の 2% を外した範囲にする。外した点も地図を動かせば見える。
+ * 点が少ないとき(20 件未満)は全点を含める(外れ値と本体の区別がつかないため)。
+ */
+export function coreBounds(points: { lat: number; lng: number }[]): CoordinateBounds | null {
+  if (points.length === 0) return null;
+  const lats = points.map((p) => p.lat).sort((a, b) => a - b);
+  const lngs = points.map((p) => p.lng).sort((a, b) => a - b);
+  const trim = points.length >= 20 ? Math.floor(points.length * 0.02) : 0;
+  const lo = trim;
+  const hi = points.length - 1 - trim;
+  return [
+    [lats[lo], lngs[lo]],
+    [lats[hi], lngs[hi]],
+  ];
+}

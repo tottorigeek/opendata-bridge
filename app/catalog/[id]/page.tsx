@@ -1,5 +1,7 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { baseOpenGraph } from "@/lib/site-metadata";
 import SiteHeader from "@/components/SiteHeader";
 import { getCurrentUser } from "@/lib/auth";
 import {
@@ -18,6 +20,38 @@ import LineagePanel from "@/components/datasets/LineagePanel";
 import { getLineage } from "@/lib/merge/lineage";
 
 export const dynamic = "force-dynamic";
+
+/** 説明文の先頭を、共有カード向けの 1 段落に縮める。 */
+function summarize(text: string, max = 120): string {
+  const flat = text.replace(/\s+/g, " ").trim();
+  const chars = [...flat];
+  return chars.length > max ? `${chars.slice(0, max - 1).join("")}…` : flat;
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  const dataset = await getCatalogDataset(id, await getCurrentUser());
+  if (!dataset) return { title: "データセットが見つかりません — OpenData Bridge" };
+
+  const title = `${dataset.title} — OpenData Bridge`;
+  const credit = dataset.attribution
+    ? `提供: ${dataset.organization.name} / 出典: ${dataset.attribution}`
+    : `提供: ${dataset.organization.name}`;
+  const description = summarize(
+    dataset.description ? `${dataset.description} (${credit})` : credit,
+  );
+  // OGP 画像は同じ階層の opengraph-image.tsx が自動で付ける。
+  return {
+    title,
+    description,
+    alternates: { canonical: `/catalog/${dataset.id}` },
+    openGraph: { ...baseOpenGraph, title, description, url: `/catalog/${dataset.id}` },
+  };
+}
 
 function formatDateTime(d: Date): string {
   return new Intl.DateTimeFormat("ja-JP", {

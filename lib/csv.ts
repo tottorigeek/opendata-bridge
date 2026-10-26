@@ -6,7 +6,6 @@ import {
   saveDatasetCsv,
   readCsvObject,
   datasetStorageKey,
-  deleteDatasetCsv,
 } from "./storage";
 
 /**
@@ -187,9 +186,4 @@ export async function readCsvForDownload(datasetId: string): Promise<Buffer | nu
 export async function saveCsvFile(datasetId: string, buffer: Buffer): Promise<void> {
   const text = decodeCsvBuffer(buffer);
   await saveDatasetCsv(datasetId, text);
-}
-
-/** storage から CSV を削除する(存在しなくてもエラーにしない)。 */
-export async function deleteCsvFile(datasetId: string): Promise<void> {
-  await deleteDatasetCsv(datasetId);
 }

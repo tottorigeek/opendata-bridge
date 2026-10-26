@@ -16,6 +16,7 @@ export const STATUS_LABEL: Record<string, string> = {
   PENDING_REVIEW: "承認待ち",
   PUBLISHED: "公開中",
   REJECTED: "差し戻し",
+  TRASHED: "ゴミ箱",
 };
 
 export const STATUS_BADGE_CLASS: Record<string, string> = {
@@ -23,6 +24,7 @@ export const STATUS_BADGE_CLASS: Record<string, string> = {
   PENDING_REVIEW: "bg-amber-100 text-amber-700",
   PUBLISHED: "bg-emerald-100 text-emerald-700",
   REJECTED: "bg-red-100 text-red-700",
+  TRASHED: "bg-slate-200 text-slate-600",
 };
 
 export const VISIBILITY_LABEL: Record<string, string> = {
@@ -220,12 +222,39 @@ export async function getOwnedDataset(datasetId: string, user: SessionUser) {
 
 // ---- 一覧・カタログクエリ ---------------------------------------------------
 
-/** 自組織のデータセット一覧(更新日降順)。 */
+// ---- ゴミ箱 -----------------------------------------------------------------
+
+/** ゴミ箱に入っているデータを除く条件。自組織向けの一覧・API・同期で使う。 */
+export const NOT_TRASHED: Prisma.DatasetWhereInput = { status: { not: "TRASHED" } };
+
+/** ゴミ箱に入っているか。 */
+export function isTrashed(dataset: { status: string }): boolean {
+  return dataset.status === "TRASHED";
+}
+
+/** ゴミ箱のデータを編集・同期などしようとしたときの案内。 */
+export const TRASHED_MESSAGE =
+  "このデータセットはゴミ箱に入っています。元に戻してから操作してください。";
+
+/** 自組織のデータセット一覧(更新日降順)。ゴミ箱のものは含めない。 */
 export async function listOrgDatasets(organizationId: string) {
   return prisma.dataset.findMany({
-    where: { organizationId },
+    where: { organizationId, ...NOT_TRASHED },
     orderBy: { updatedAt: "desc" },
   });
+}
+
+/** 自組織のゴミ箱の一覧(ゴミ箱に入れた日時の新しい順)。 */
+export async function listTrashedDatasets(organizationId: string) {
+  return prisma.dataset.findMany({
+    where: { organizationId, status: "TRASHED" },
+    orderBy: { trashedAt: "desc" },
+  });
+}
+
+/** 自組織のゴミ箱の件数(サイドバーなどの表示用)。 */
+export async function countTrashedDatasets(organizationId: string) {
+  return prisma.dataset.count({ where: { organizationId, status: "TRASHED" } });
 }
 
 /** 承認待ち(PENDING_REVIEW)一覧。ADMIN の承認画面用。 */

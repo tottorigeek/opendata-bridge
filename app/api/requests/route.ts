@@ -84,9 +84,10 @@ export async function POST(request: Request) {
   if (body.datasetId) {
     const dataset = await prisma.dataset.findUnique({
       where: { id: body.datasetId },
-      select: { id: true, organizationId: true },
+      select: { id: true, organizationId: true, status: true },
     });
-    if (!dataset || dataset.organizationId !== organizationId) {
+    // ゴミ箱のデータセットは宛先にできない(一般からは見えないため)
+    if (!dataset || dataset.organizationId !== organizationId || dataset.status === "TRASHED") {
       return NextResponse.json(
         { error: "対象データセットが宛先組織のものではありません。" },
         { status: 400 },

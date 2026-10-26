@@ -8,10 +8,12 @@ import {
   getOwnedDataset,
   parseRegionInput,
   parseAttributionInput,
+  isTrashed,
+  TRASHED_MESSAGE,
 } from "@/lib/datasets";
 import { extractCsvMeta } from "@/lib/csv";
 import { createDatasetVersion } from "@/lib/versions";
-import { deleteAllDatasetObjects } from "@/lib/storage";
+import { moveToTrash } from "@/lib/trash";
 
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 
@@ -31,6 +33,10 @@ export async function PATCH(
       { error: "データセットが見つからないか、操作権限がありません。" },
       { status: 404 },
     );
+  }
+
+  if (isTrashed(existing)) {
+    return NextResponse.json({ error: TRASHED_MESSAGE }, { status: 409 });
   }
 
   let form: FormData;
@@ -143,7 +149,10 @@ export async function PATCH(
   });
 }
 
-/** データセット削除(全版のファイルも削除)。自組織のみ。 */
+/**
+ * データセットをゴミ箱に入れる(自組織のみ)。完全な削除はゴミ箱から管理者が行う
+ * (/api/datasets/[id]/purge)。
+ */
 export async function DELETE(
   _request: Request,
   ctx: { params: Promise<{ id: string }> },
@@ -160,35 +169,10 @@ export async function DELETE(
       { status: 404 },
     );
   }
-
-  // 版の行はデータセットと一緒にカスケード削除されるため、先にファイルの場所を控える。
-  const versions = await prisma.datasetVersion.findMany({
-    where: { datasetId: id },
-    select: { filePath: true },
-  });
-
-  // pruneVersions と同じく、先に実体を消してから行を消す。逆順で実体の削除に
-  // 失敗すると、アプリから辿れないのにストレージには残るファイルが生まれる。
-  // 取り下げ理由が個人情報の混入であることもあるため、残すわけにはいかない。
-  try {
-    await deleteAllDatasetObjects(id, versions.map((v) => v.filePath));
-  } catch (e) {
-    console.error("[datasets/delete] ストレージの削除に失敗しました", { datasetId: id, error: e });
-    return NextResponse.json(
-      { error: "ファイルの削除に失敗したため、データセットを削除できませんでした。時間をおいて再度お試しください。" },
-      { status: 500 },
-    );
+  if (isTrashed(existing)) {
+    return NextResponse.json({ ok: true, alreadyTrashed: true });
   }
 
-  await prisma.dataset.delete({ where: { id } });
-
-  // 上の削除から行の削除までの間に、外部同期などが新しい版を書き込んでいた場合に備え、
-  // もう一度フォルダごと掃除する。行は既に無いので、ここでの失敗はログに残すに留める。
-  try {
-    await deleteAllDatasetObjects(id);
-  } catch (e) {
-    console.error("[datasets/delete] 削除後の再掃除に失敗しました", { datasetId: id, error: e });
-  }
-
+  await moveToTrash(id);
   return NextResponse.json({ ok: true });
 }

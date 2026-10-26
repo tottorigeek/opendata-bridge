@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { getOwnedDataset } from "@/lib/datasets";
+import { getOwnedDataset, isTrashed, TRASHED_MESSAGE } from "@/lib/datasets";
 import { RATE_LIMITS, consumeRateLimit } from "@/lib/rate-limit";
 import { syncDataSource } from "@/lib/sources/sync";
 
@@ -25,6 +25,9 @@ export async function POST(
       { error: "データセットが見つからないか、操作権限がありません。" },
       { status: 404 },
     );
+  }
+  if (isTrashed(dataset)) {
+    return NextResponse.json({ error: TRASHED_MESSAGE }, { status: 409 });
   }
 
   const source = await prisma.dataSource.findUnique({ where: { datasetId: id } });

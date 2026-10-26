@@ -7,7 +7,9 @@ import { useRouter } from "next/navigation";
  * データセット詳細ページのアクション群(クライアント)。
  * - 公開申請(DRAFT / REJECTED)
  * - 承認 / 差し戻し(ADMIN かつ PENDING_REVIEW)
- * - 削除
+ *
+ * ゴミ箱に入れる操作は公開の手続きとは性質が違うので、ここには置かない
+ * (ページ上部の TrashActions)。
  */
 export default function DatasetDetailActions({
   id,
@@ -59,20 +61,10 @@ export default function DatasetDetailActions({
     setBusy(false);
   }
 
-  async function handleDelete() {
-    if (
-      !confirm(
-        "このデータセットを削除します。この操作は取り消せません。よろしいですか?",
-      )
-    )
-      return;
-    if (!(await call(`/api/datasets/${id}`, "DELETE"))) return;
-    router.push("/dashboard/datasets");
-    router.refresh();
-  }
-
   const canSubmit = status === "DRAFT" || status === "REJECTED";
   const canReview = isAdmin && status === "PENDING_REVIEW";
+  const waiting = status === "PENDING_REVIEW" && !isAdmin;
+  if (!canSubmit && !canReview && !waiting) return null;
 
   return (
     <div className="space-y-3">
@@ -109,13 +101,6 @@ export default function DatasetDetailActions({
             </button>
           </>
         )}
-        <button
-          onClick={handleDelete}
-          disabled={busy}
-          className="rounded-md border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-60"
-        >
-          削除
-        </button>
       </div>
       {status === "PENDING_REVIEW" && !isAdmin && (
         <p className="text-xs text-slate-500">

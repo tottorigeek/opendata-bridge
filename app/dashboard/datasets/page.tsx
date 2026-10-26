@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import {
   listOrgDatasets,
   listPendingDatasets,
+  countTrashedDatasets,
   STATUS_LABEL,
   STATUS_BADGE_CLASS,
   VISIBILITY_LABEL,
@@ -26,6 +27,7 @@ export default async function DatasetsPage() {
   const datasets = await listOrgDatasets(user.organizationId);
   const pending =
     user.role === "ADMIN" ? await listPendingDatasets(user.organizationId) : [];
+  const trashedCount = await countTrashedDatasets(user.organizationId);
 
   return (
     <div>
@@ -34,6 +36,11 @@ export default async function DatasetsPage() {
           <h1 className="text-2xl font-bold text-slate-900">データセット</h1>
           <p className="mt-1 text-slate-600">
             {user.organization.name} のデータセットを登録・管理します。
+            {trashedCount > 0 && (
+              <Link href="/dashboard/trash" className="ml-2 text-sm text-slate-500 hover:text-sky-700 hover:underline">
+                ゴミ箱({trashedCount.toLocaleString("ja-JP")} 件)
+              </Link>
+            )}
           </p>
         </div>
         <Link

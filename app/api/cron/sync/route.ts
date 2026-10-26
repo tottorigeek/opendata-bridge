@@ -50,7 +50,8 @@ export async function GET(request: Request) {
 
   // 最後に同期した時刻が古いものから処理し、件数超過時も順番に回るようにする。
   const sources = await prisma.dataSource.findMany({
-    where: { syncMode: "SCHEDULED" },
+    // ゴミ箱のデータセットは取り込まない(元に戻すまで止めておく)
+    where: { syncMode: "SCHEDULED", dataset: { status: { not: "TRASHED" } } },
     orderBy: [{ lastSyncedAt: { sort: "asc", nulls: "first" } }],
     take: MAX_SOURCES_PER_RUN,
   });

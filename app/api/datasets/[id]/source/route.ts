@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { getOwnedDataset } from "@/lib/datasets";
+import { getOwnedDataset, isTrashed, TRASHED_MESSAGE } from "@/lib/datasets";
 import { encryptSecret } from "@/lib/crypto";
 import { parseSourceConfig } from "@/lib/sources/request";
 
@@ -27,6 +27,9 @@ export async function PUT(
       { error: "データセットが見つからないか、操作権限がありません。" },
       { status: 404 },
     );
+  }
+  if (isTrashed(dataset)) {
+    return NextResponse.json({ error: TRASHED_MESSAGE }, { status: 409 });
   }
 
   let body: unknown;
@@ -113,6 +116,9 @@ export async function DELETE(
       { error: "データセットが見つからないか、操作権限がありません。" },
       { status: 404 },
     );
+  }
+  if (isTrashed(dataset)) {
+    return NextResponse.json({ error: TRASHED_MESSAGE }, { status: 409 });
   }
 
   const existing = await prisma.dataSource.findUnique({

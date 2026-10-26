@@ -12,14 +12,14 @@ import { parseCsv, toCsv, type CsvTable } from "./csv";
 
 /**
  * マージのソースとして選べるデータセットを返す。
- *   - 自組織の全データセット
+ *   - 自組織のデータセット(ゴミ箱のものは除く)
  *   - 他組織でも PUBLISHED かつ PUBLIC のデータセット
  */
 export async function listMergeableDatasets(user: SessionUser): Promise<Dataset[]> {
   return prisma.dataset.findMany({
     where: {
       OR: [
-        { organizationId: user.organizationId },
+        { organizationId: user.organizationId, status: { not: "TRASHED" } },
         { status: "PUBLISHED", visibility: "PUBLIC" },
       ],
     },
@@ -29,6 +29,7 @@ export async function listMergeableDatasets(user: SessionUser): Promise<Dataset[
 
 /** そのユーザーが当該データセットをマージ入力として読めるか判定する。 */
 export function canUseAsMergeSource(user: SessionUser, dataset: Dataset): boolean {
+  if (dataset.status === "TRASHED") return false;
   if (dataset.organizationId === user.organizationId) return true;
   return dataset.status === "PUBLISHED" && dataset.visibility === "PUBLIC";
 }

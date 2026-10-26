@@ -12,9 +12,10 @@ import {
   formatRegion,
   VISIBILITY_LABEL,
 } from "@/lib/datasets";
-import { readCsvTable, toCsvPreview } from "@/lib/csv";
+import { readCsvTable } from "@/lib/csv";
 import { detectCoordinateColumns, toMapPoints } from "@/lib/geo";
-import CsvPreviewTable from "@/components/datasets/CsvPreviewTable";
+import DataBrowser from "@/components/datasets/DataBrowser";
+import { filterRows, paginate, parseTableQuery } from "@/lib/table-search";
 import DatasetMapLoader from "@/components/datasets/DatasetMapLoader";
 import LineagePanel from "@/components/datasets/LineagePanel";
 import { getLineage } from "@/lib/merge/lineage";
@@ -66,8 +67,10 @@ function formatDateTime(d: Date): string {
 
 export default async function CatalogDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ q?: string; col?: string; page?: string }>;
 }) {
   const user = await getCurrentUser();
   const { id } = await params;
@@ -77,12 +80,22 @@ export default async function CatalogDetailPage({
   const table = dataset.filePath
     ? await readCsvTable(dataset.id)
     : { columns: [], rows: [] };
-  const preview = toCsvPreview(table, 50);
+  // 全行の閲覧と検索。条件は URL のクエリ(?q=&col=&page=)で受け取る。
+  const query = parseTableQuery(await searchParams, table.columns);
+  const matched = filterRows(table.rows, query);
+  const dataPage = paginate(matched, query.page);
   // 緯度・経度の列があれば地図を出し、GeoJSON でも配る。
   const coordinateColumns = detectCoordinateColumns(table.columns);
   const map = coordinateColumns
     ? toMapPoints(table.columns, table.rows, coordinateColumns)
     : null;
+  // 検索中は、地図も一致した行の地点だけにする
+  const matchedRows = query.q ? new Set(matched.map((m) => m.index)) : null;
+  const mapPoints = map
+    ? matchedRows
+      ? map.points.filter((p) => matchedRows.has(p.row))
+      : map.points
+    : [];
   const tags = parseTags(dataset.tags);
   // マージ由来のデータセットは、どの出典から作られたかを併せて示す。
   const lineage =
@@ -276,10 +289,19 @@ export default async function CatalogDetailPage({
           {map && map.points.length > 0 && (
             <div className="mt-8">
               <h2 className="mb-3 text-lg font-semibold text-slate-900">地図</h2>
-              <DatasetMapLoader points={map.points} />
+              {mapPoints.length > 0 ? (
+                <DatasetMapLoader points={mapPoints} />
+              ) : (
+                <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500">
+                  検索に一致する地点はありません。
+                </div>
+              )}
               <p className="mt-2 text-xs text-slate-500">
-                {map.points.length.toLocaleString("ja-JP")} 地点を表示
-                {map.skipped > 0 &&
+                {query.q
+                  ? `検索に一致した ${mapPoints.length.toLocaleString("ja-JP")} 地点を表示(全 ${map.points.length.toLocaleString("ja-JP")} 地点)`
+                  : `${map.points.length.toLocaleString("ja-JP")} 地点を表示`}
+                {!query.q &&
+                  map.skipped > 0 &&
                   `(座標のない・読めない ${map.skipped.toLocaleString("ja-JP")} 行は除く)`}
                 {map.truncated > 0 &&
                   `。表示上限のため ${map.truncated.toLocaleString("ja-JP")} 地点は省略`}
@@ -288,16 +310,15 @@ export default async function CatalogDetailPage({
             </div>
           )}
 
-          {/* プレビュー */}
-          <div className="mt-8">
-            <h2 className="mb-3 text-lg font-semibold text-slate-900">
-              データプレビュー
-            </h2>
-            <CsvPreviewTable
-              columns={preview.columns}
-              rows={preview.rows}
-              totalRows={preview.totalRows}
-              shown={preview.rows.length}
+          {/* データ(全行の閲覧と検索) */}
+          <div id="data" className="mt-8 scroll-mt-4">
+            <h2 className="mb-3 text-lg font-semibold text-slate-900">データ</h2>
+            <DataBrowser
+              columns={table.columns}
+              totalRows={table.rows.length}
+              query={query}
+              page={dataPage}
+              basePath={`/catalog/${dataset.id}`}
             />
           </div>
         </div>

@@ -8,10 +8,11 @@ import {
   STATUS_BADGE_CLASS,
   VISIBILITY_LABEL,
 } from "@/lib/datasets";
-import { readCsvPreview } from "@/lib/csv";
+import { readCsvTable } from "@/lib/csv";
 import { prisma } from "@/lib/prisma";
 import { parseFieldMap } from "@/lib/sources/transform";
-import CsvPreviewTable from "@/components/datasets/CsvPreviewTable";
+import DataBrowser from "@/components/datasets/DataBrowser";
+import { filterRows, paginate, parseTableQuery } from "@/lib/table-search";
 import DatasetDetailActions from "@/components/datasets/DatasetDetailActions";
 import LineagePanel from "@/components/datasets/LineagePanel";
 import { getLineage } from "@/lib/merge/lineage";
@@ -36,8 +37,10 @@ function formatDateTime(d: Date): string {
 
 export default async function DatasetDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ q?: string; col?: string; page?: string }>;
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
@@ -46,9 +49,12 @@ export default async function DatasetDetailPage({
   const dataset = await getOwnedDataset(id, user);
   if (!dataset) notFound();
 
-  const preview = dataset.filePath
-    ? await readCsvPreview(dataset.id, 50)
-    : { columns: [], rows: [], totalRows: 0 };
+  // 全行の閲覧と検索。条件は URL のクエリ(?q=&col=&page=)で受け取る。
+  const table = dataset.filePath
+    ? await readCsvTable(dataset.id)
+    : { columns: [], rows: [] };
+  const query = parseTableQuery(await searchParams, table.columns);
+  const dataPage = paginate(filterRows(table.rows, query), query.page);
   const tags = parseTags(dataset.tags);
   // マージ由来なら、どの出典から作られたかを併せて示す。
   const lineage =
@@ -229,11 +235,10 @@ export default async function DatasetDetailPage({
       </div>
 
       {/* プレビュー */}
-      <div className="mt-8">
+      {/* データ(全行の閲覧と検索) */}
+      <div id="data" className="mt-8 scroll-mt-4">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-slate-900">
-            データプレビュー
-          </h2>
+          <h2 className="text-lg font-semibold text-slate-900">データ</h2>
           {dataset.filePath && (
             <a
               href={`/api/datasets/${dataset.id}/download`}
@@ -243,11 +248,12 @@ export default async function DatasetDetailPage({
             </a>
           )}
         </div>
-        <CsvPreviewTable
-          columns={preview.columns}
-          rows={preview.rows}
-          totalRows={preview.totalRows}
-          shown={preview.rows.length}
+        <DataBrowser
+          columns={table.columns}
+          totalRows={table.rows.length}
+          query={query}
+          page={dataPage}
+          basePath={`/dashboard/datasets/${dataset.id}`}
         />
       </div>
 

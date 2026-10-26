@@ -1,6 +1,8 @@
 import Link from "next/link";
 import SiteHeader from "@/components/SiteHeader";
 import { consumeEmailVerification } from "@/lib/verification";
+import type { Metadata } from "next";
+import { noIndex } from "@/lib/site-metadata";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +13,9 @@ const FAILURE_MESSAGE: Record<string, string> = {
   email_changed:
     "リンクの発行後にメールアドレスが変更されています。ダッシュボードから再送してください。",
 };
+
+// 個人ごとの手続きの画面なので検索結果には出さない
+export const metadata: Metadata = { title: "メールアドレスの確認 — OpenData Bridge", robots: noIndex };
 
 export default async function VerifyEmailPage({
   searchParams,

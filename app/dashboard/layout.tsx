@@ -3,11 +3,16 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import DashboardSidebar from "@/components/DashboardSidebar";
 import { countUnread } from "@/lib/notifications";
+import type { Metadata } from "next";
+import { noIndex } from "@/lib/site-metadata";
 
 const ORG_TYPE_LABEL: Record<string, string> = {
   GOVERNMENT: "行政",
   PRIVATE: "民間",
 };
+
+// 管理画面は検索結果に出さない(robots.txt でも除外しているが、リンクから辿られた場合に備える)
+export const metadata: Metadata = { title: "ダッシュボード — OpenData Bridge", robots: noIndex };
 
 export default async function DashboardLayout({
   children,

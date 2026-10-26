@@ -18,6 +18,7 @@ import CsvPreviewTable from "@/components/datasets/CsvPreviewTable";
 import DatasetMapLoader from "@/components/datasets/DatasetMapLoader";
 import LineagePanel from "@/components/datasets/LineagePanel";
 import { getLineage } from "@/lib/merge/lineage";
+import { datasetJsonLd, toJsonLdScript } from "@/lib/structured-data";
 
 export const dynamic = "force-dynamic";
 
@@ -86,9 +87,26 @@ export default async function CatalogDetailPage({
   // マージ由来のデータセットは、どの出典から作られたかを併せて示す。
   const lineage =
     dataset.sourceType === "MERGED" ? await getLineage(dataset.id) : null;
+  // 検索エンジン向けの構造化データ。一般公開のデータセットだけに付ける
+  // (組織内限定のデータを閲覧中のメンバーのページにも出るが、検索エンジンには届かない)。
+  const jsonLd =
+    dataset.visibility === "PUBLIC"
+      ? toJsonLdScript(
+          datasetJsonLd(dataset, {
+            region: formatRegion(effectiveRegion(dataset)),
+            tags,
+            columns: table.columns,
+            hasMap: !!map && map.points.length > 0,
+          }),
+        )
+      : null;
 
   return (
     <>
+      {jsonLd && (
+        // toJsonLdScript が "<" をエスケープしているので、値に "</script>" が含まれても要素は閉じない
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd }} />
+      )}
       <SiteHeader />
       <main className="flex-1">
         <div className="mx-auto max-w-5xl px-4 py-12">

@@ -8,7 +8,8 @@ const isDev = process.env.NODE_ENV === "development";
  * nonce 方式(proxy.ts で毎リクエスト生成)にすると 'unsafe-inline' を外せるが、
  * 全ページが動的レンダリング必須になり静的最適化・CDN キャッシュが効かなくなる。
  * 本アプリは自前の inline script を持たず、React が既定で出力をエスケープする
- * (dangerouslySetInnerHTML も未使用)ため XSS の下地が薄い。そのため
+ * (dangerouslySetInnerHTML は構造化データの JSON-LD だけで、"<" をエスケープ済み —
+ * lib/structured-data.ts の toJsonLdScript)ため XSS の下地が薄い。そのため
  * Next.js が挿入する inline script のために 'unsafe-inline' を許容し、
  * それ以外(外部スクリプト読み込み・iframe 埋め込み・base 差し替え・
  * 外部へのフォーム送信)は塞ぐ構成にしている。

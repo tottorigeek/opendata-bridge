@@ -53,16 +53,14 @@ body {
 
 /* クラスター(まとめた地点)。件数を中央に表示する */
 .leaflet-marker-icon.odb-map-cluster {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  /* 塗りは中の要素が件数に応じた色で行う(components/datasets/DatasetMap.tsx の clusterIcon) */
   border-radius: 9999px;
-  background: rgba(2, 132, 199, 0.85);
-  border: 3px solid rgba(186, 230, 253, 0.9);
+  border: 3px solid rgba(255, 255, 255, 0.85);
   color: #fff;
   font-size: 0.8rem;
   font-weight: 700;
-  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.3);
+  text-shadow: 0 0 2px rgba(15, 23, 42, 0.55);
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.35);
 }
 
 /* 全画面表示のボタン */
@@ -91,4 +89,38 @@ body {
   inset: 0;
   z-index: 1000;
   background: #fff;
+}
+
+/* クラスター表示の切り替えボタン(地図の右上) */
+.odb-map-cluster-toggle {
+  width: auto !important;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 30px;
+  white-space: nowrap;
+  text-decoration: none;
+  color: #0f172a;
+}
+.odb-map-cluster-toggle[aria-checked="true"] {
+  color: #0369a1;
+}
+
+/* クラスターの色の凡例(地図の左下) */
+.odb-map-legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.9);
+  font-size: 11px;
+  color: #334155;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.2);
+}
+.odb-map-legend-bar {
+  display: inline-block;
+  width: 72px;
+  height: 8px;
+  border-radius: 9999px;
 }

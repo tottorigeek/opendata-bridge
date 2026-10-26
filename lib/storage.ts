@@ -7,6 +7,9 @@
  *   - Supabase Storage ドライバ … 非公開バケット内の `datasets/{id}.csv`
  *                              (SUPABASE_URL と SUPABASE_SERVICE_ROLE_KEY が両方あるとき)
  *
+ * 版を持つデータの本文は `datasets/{id}/v{n}.csv` に置く(datasetVersionStorageKey)。
+ * データセットを削除するときは deleteAllDatasetObjects で両方の形式をまとめて消す。
+ *
  * すべての読み書きは「データセット id」をキーに行う。DB の Dataset.filePath は
  * このストレージキー(datasetStorageKey(id) === "datasets/{id}.csv")を保持する。
  * このキーはバケット内のオブジェクトパスとしてもそのまま使う。
@@ -177,9 +180,81 @@ export async function deleteCsvObject(key: string): Promise<void> {
   }
 }
 
-/** データセット id をキーにした削除(版を持たない経路の互換用)。 */
-export async function deleteDatasetCsv(id: string): Promise<void> {
-  return deleteCsvObject(datasetStorageKey(id));
+/** 版ファイルを置く、データセットごとのフォルダ(末尾スラッシュなし)。 */
+function datasetVersionFolder(datasetId: string): string {
+  return `datasets/${datasetId}`;
+}
+
+/** Supabase Storage の remove 1 回あたりに渡すキーの上限。 */
+const REMOVE_BATCH_SIZE = 1000;
+
+/**
+ * データセットに属する保存物をすべて削除する(データセット削除時に使う)。
+ *
+ * 対象は次の和集合:
+ *   - 旧形式のキー datasets/{id}.csv(版の導入前のデータ・初版)
+ *   - datasets/{id}/ 以下の全オブジェクト(版ファイル)
+ *   - 呼び出し側が渡したキー(DB の DatasetVersion.filePath)
+ * DB の行だけを頼りにすると、保存後に行の作成が失敗した版などを取りこぼすため、
+ * フォルダの列挙も併用する。
+ *
+ * deleteCsvObject と異なり、削除に失敗したら例外を投げる。
+ * データセット削除は個人情報を含む版を取り下げる手段でもあり、
+ * 実体が残ったまま「削除できた」と扱ってはならないため。
+ */
+export async function deleteAllDatasetObjects(
+  datasetId: string,
+  knownKeys: string[] = [],
+): Promise<void> {
+  // id が空や区切り文字を含むと、フォルダ削除が datasets/ 全体などに及ぶ。
+  if (!/^[A-Za-z0-9_-]+$/.test(datasetId)) {
+    throw new Error(`不正なデータセット id です: ${datasetId}`);
+  }
+  const folder = datasetVersionFolder(datasetId);
+  const keys = new Set([datasetStorageKey(datasetId), ...knownKeys]);
+
+  if (isBlobStorageEnabled()) {
+    const supabase = await getSupabase();
+    const bucket = supabase.storage.from(bucketName());
+
+    // list はフォルダ直下しか返さないため、サブフォルダは辿って集める。
+    // (版ファイルはすべて直下に置かれるが、ローカルドライバの再帰削除と揃える。)
+    const folders = [folder];
+    while (folders.length > 0) {
+      const current = folders.pop() as string;
+      for (let offset = 0; ; offset += REMOVE_BATCH_SIZE) {
+        const { data, error } = await bucket.list(current, {
+          limit: REMOVE_BATCH_SIZE,
+          offset,
+          sortBy: { column: "name", order: "asc" },
+        });
+        if (error) {
+          throw new Error(`Supabase Storage の一覧取得に失敗しました: ${error.message}`);
+        }
+        for (const entry of data ?? []) {
+          // id が null のものはサブフォルダ(実体ではない)。
+          if (entry.id) keys.add(`${current}/${entry.name}`);
+          else folders.push(`${current}/${entry.name}`);
+        }
+        if (!data || data.length < REMOVE_BATCH_SIZE) break;
+      }
+    }
+
+    const all = [...keys];
+    for (let i = 0; i < all.length; i += REMOVE_BATCH_SIZE) {
+      const { error } = await bucket.remove(all.slice(i, i + REMOVE_BATCH_SIZE));
+      if (error) {
+        throw new Error(`Supabase Storage からの削除に失敗しました: ${error.message}`);
+      }
+    }
+    return;
+  }
+
+  // force: true で「存在しない」は無視し、それ以外の失敗は例外にする。
+  for (const key of keys) {
+    await fs.rm(localPathForKey(key), { force: true });
+  }
+  await fs.rm(localPathForKey(folder), { recursive: true, force: true });
 }
 
 /** CSV が存在するか。 */

@@ -15,6 +15,8 @@ export type MapPoint = {
   lat: number;
   lng: number;
   props: [string, string][];
+  /** 元の表での 0 始まりの行位置(検索で絞り込んだ行だけを地図に出すのに使う)。 */
+  row: number;
 };
 
 export type MapPoints = {
@@ -93,15 +95,15 @@ export function toMapPoints(
   let skipped = 0;
   let truncated = 0;
   const constant = constantColumns(columns, rows);
-  for (const row of rows) {
+  rows.forEach((row, rowIndex) => {
     const coord = rowCoordinate(row, cols);
     if (!coord) {
       skipped++;
-      continue;
+      return;
     }
     if (points.length >= max) {
       truncated++;
-      continue;
+      return;
     }
     const props: [string, string][] = [];
     columns.forEach((name, i) => {
@@ -109,8 +111,8 @@ export function toMapPoints(
       const v = (row[i] ?? "").trim();
       if (v !== "") props.push([name, v]);
     });
-    points.push({ ...coord, props });
-  }
+    points.push({ ...coord, props, row: rowIndex });
+  });
   return { points, skipped, truncated };
 }
 

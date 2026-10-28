@@ -31,7 +31,8 @@ export default async function DashboardLayout({
   return (
     <div className="flex min-h-screen">
       <DashboardSidebar unreadCount={unreadCount} />
-      <div className="flex flex-1 flex-col">
+      {/* min-w-0: 横長の表などで本文が押し広げられ、右端のボタンが画面外に出ないようにする */}
+      <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-16 items-center justify-between border-b border-slate-200 bg-white px-6">
           <div className="flex items-center text-sm text-slate-500">
             {user.organization.name}

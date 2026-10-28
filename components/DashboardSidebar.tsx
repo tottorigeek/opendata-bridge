@@ -11,6 +11,7 @@ const NAV = [
   { href: "/dashboard/notifications", label: "通知" },
   { href: "/dashboard/api-keys", label: "APIキー" },
   { href: "/dashboard/settings", label: "組織設定" },
+  { href: "/dashboard/trash", label: "ゴミ箱" },
 ];
 
 /** 未読件数はサーバー側で数え、レイアウトから渡す。 */

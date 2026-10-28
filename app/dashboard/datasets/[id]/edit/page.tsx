@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
-import { getOwnedDataset } from "@/lib/datasets";
+import { getOwnedDataset, isTrashed } from "@/lib/datasets";
 import DatasetForm from "@/components/datasets/DatasetForm";
 
 export default async function EditDatasetPage({
@@ -15,6 +15,8 @@ export default async function EditDatasetPage({
   const { id } = await params;
   const dataset = await getOwnedDataset(id, user);
   if (!dataset) notFound();
+  // ゴミ箱のデータは編集できない(保存しても拒否される)ので、案内のある詳細画面へ戻す
+  if (isTrashed(dataset)) redirect(`/dashboard/datasets/${dataset.id}`);
 
   return (
     <div>

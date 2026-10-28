@@ -16,7 +16,8 @@ export function datasetAccessWhere(orgId: string): Prisma.DatasetWhereInput {
   return {
     OR: [
       { status: "PUBLISHED", visibility: "PUBLIC" },
-      { organizationId: orgId },
+      // 自組織のデータは下書きなども含めて返すが、ゴミ箱のものは返さない
+      { organizationId: orgId, status: { not: "TRASHED" } },
     ],
   };
 }

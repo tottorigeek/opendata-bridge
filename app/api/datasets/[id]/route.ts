@@ -8,9 +8,12 @@ import {
   getOwnedDataset,
   parseRegionInput,
   parseAttributionInput,
+  isTrashed,
+  TRASHED_MESSAGE,
 } from "@/lib/datasets";
-import { extractCsvMeta, deleteCsvFile } from "@/lib/csv";
+import { extractCsvMeta } from "@/lib/csv";
 import { createDatasetVersion } from "@/lib/versions";
+import { moveToTrash } from "@/lib/trash";
 
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 
@@ -30,6 +33,10 @@ export async function PATCH(
       { error: "データセットが見つからないか、操作権限がありません。" },
       { status: 404 },
     );
+  }
+
+  if (isTrashed(existing)) {
+    return NextResponse.json({ error: TRASHED_MESSAGE }, { status: 409 });
   }
 
   let form: FormData;
@@ -142,7 +149,10 @@ export async function PATCH(
   });
 }
 
-/** データセット削除(ファイルも削除)。自組織のみ。 */
+/**
+ * データセットをゴミ箱に入れる(自組織のみ)。完全な削除はゴミ箱から管理者が行う
+ * (/api/datasets/[id]/purge)。
+ */
 export async function DELETE(
   _request: Request,
   ctx: { params: Promise<{ id: string }> },
@@ -159,8 +169,10 @@ export async function DELETE(
       { status: 404 },
     );
   }
+  if (isTrashed(existing)) {
+    return NextResponse.json({ ok: true, alreadyTrashed: true });
+  }
 
-  await prisma.dataset.delete({ where: { id } });
-  await deleteCsvFile(id);
+  await moveToTrash(id);
   return NextResponse.json({ ok: true });
 }

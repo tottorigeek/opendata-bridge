@@ -254,6 +254,8 @@ model Dataset {
   attribution     String        @default("")
   /// 出典の参照先 URL(http / https のみ)。空可。
   attributionUrl  String        @default("")
+  /// ゴミ箱に入れた日時(status = TRASHED の間だけ値がある)。
+  trashedAt       DateTime?
   organizationId  String
   organization    Organization  @relation(fields: [organizationId], references: [id])
   /// 外部 API から取り込む場合の接続設定(sourceType = API のとき設定される)。
@@ -358,6 +360,9 @@ enum DatasetStatus {
   PENDING_REVIEW
   PUBLISHED
   REJECTED
+  /// ゴミ箱。公開系の処理はすべて PUBLISHED だけを見るので、この状態のデータは一般から見えない。
+  /// 元に戻すと DRAFT になる(公開には承認のやり直しが必要)。
+  TRASHED
 }
 
 enum SourceType {

@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import {
   getOwnedDataset,
+  isTrashed,
   parseTags,
   STATUS_LABEL,
   STATUS_BADGE_CLASS,
@@ -14,6 +15,7 @@ import { parseFieldMap } from "@/lib/sources/transform";
 import DataBrowser from "@/components/datasets/DataBrowser";
 import { filterRows, paginate, parseTableQuery } from "@/lib/table-search";
 import DatasetDetailActions from "@/components/datasets/DatasetDetailActions";
+import { MoveToTrashButton, TrashedDatasetActions } from "@/components/datasets/TrashActions";
 import LineagePanel from "@/components/datasets/LineagePanel";
 import { getLineage } from "@/lib/merge/lineage";
 import { checkStaleness } from "@/lib/merge/refresh";
@@ -48,6 +50,7 @@ export default async function DatasetDetailPage({
   const { id } = await params;
   const dataset = await getOwnedDataset(id, user);
   if (!dataset) notFound();
+  const trashed = isTrashed(dataset);
 
   // 全行の閲覧と検索。条件は URL のクエリ(?q=&col=&page=)で受け取る。
   const table = dataset.filePath
@@ -126,24 +129,40 @@ export default async function DatasetDetailPage({
             {STATUS_LABEL[dataset.status]}
           </span>
         </div>
-        <div className="flex shrink-0 gap-2">
-          {/* 公開中なら、一般の閲覧者が見るカタログのページへ */}
-          {dataset.status === "PUBLISHED" && (
+        {!trashed && (
+          <div className="flex shrink-0 flex-wrap justify-end gap-2">
+            {/* 公開中なら、一般の閲覧者が見るカタログのページへ */}
+            {dataset.status === "PUBLISHED" && (
+              <Link
+                href={`/catalog/${dataset.id}`}
+                className="rounded-md border border-sky-600 bg-white px-4 py-2 text-sm font-medium text-sky-700 hover:bg-sky-50"
+              >
+                公開ページを見る
+              </Link>
+            )}
             <Link
-              href={`/catalog/${dataset.id}`}
-              className="rounded-md border border-sky-600 bg-white px-4 py-2 text-sm font-medium text-sky-700 hover:bg-sky-50"
+              href={`/dashboard/datasets/${dataset.id}/edit`}
+              className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
             >
-              公開ページを見る
+              編集
             </Link>
-          )}
-          <Link
-            href={`/dashboard/datasets/${dataset.id}/edit`}
-            className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
-            編集
-          </Link>
-        </div>
+            {/* 取り消せる操作なので、公開の手続きのボタンとは分けてここに置く */}
+            <MoveToTrashButton id={dataset.id} title={dataset.title} />
+          </div>
+        )}
       </div>
+
+      {trashed && (
+        <div className="mt-4 flex flex-col gap-3 rounded-md border border-slate-300 bg-slate-100 px-4 py-3 text-sm text-slate-700 sm:flex-row sm:items-center sm:justify-between">
+          <p className="min-w-0 flex-1">
+            このデータセットはゴミ箱に入っています
+            {dataset.trashedAt && `(${formatDateTime(dataset.trashedAt)}に移動)`}
+            。元に戻すと下書きになり、公開するには承認をやり直します。
+            {user.role !== "ADMIN" && " 完全に削除できるのは組織の管理者です。"}
+          </p>
+          <TrashedDatasetActions id={dataset.id} title={dataset.title} isAdmin={user.role === "ADMIN"} />
+        </div>
+      )}
       {dataset.description && (
         <p className="mt-2 max-w-2xl whitespace-pre-wrap text-slate-600">
           {dataset.description}
@@ -216,25 +235,28 @@ export default async function DatasetDetailPage({
         </div>
       </dl>
 
-      {/* アクション */}
-      <div className="mt-6">
-        <DatasetDetailActions
-          id={dataset.id}
-          status={dataset.status}
-          isAdmin={user.role === "ADMIN"}
-        />
-      </div>
+      {/* 公開の手続き(公開申請・承認・差し戻し)。ゴミ箱の間は出さない */}
+      {!trashed && (
+        <div className="mt-6">
+          <DatasetDetailActions
+            id={dataset.id}
+            status={dataset.status}
+            isAdmin={user.role === "ADMIN"}
+          />
+        </div>
+      )}
 
-      {/* 外部データソース */}
-      <div className="mt-8">
-        <DataSourcePanel
-          datasetId={dataset.id}
-          initialConfig={sourceConfig}
-          initialRuns={syncRuns}
-        />
-      </div>
+      {/* 外部データソース。ゴミ箱の間は同期も設定変更もできないので出さない */}
+      {!trashed && (
+        <div className="mt-8">
+          <DataSourcePanel
+            datasetId={dataset.id}
+            initialConfig={sourceConfig}
+            initialRuns={syncRuns}
+          />
+        </div>
+      )}
 
-      {/* プレビュー */}
       {/* データ(全行の閲覧と検索) */}
       <div id="data" className="mt-8 scroll-mt-4">
         <div className="mb-3 flex items-center justify-between">

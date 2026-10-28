@@ -171,6 +171,9 @@ export async function refreshMergedDataset(
 ): Promise<RefreshOutcome> {
   const dataset = await prisma.dataset.findUnique({ where: { id: datasetId } });
   if (!dataset) return { applied: false, message: "データセットが見つかりません。", reason: "no_lineage" };
+  if (dataset.status === "TRASHED") {
+    return { applied: false, message: "ゴミ箱に入っているため作り直しません。", reason: "no_lineage" };
+  }
 
   const lineage = await prisma.mergeLineage.findUnique({
     where: { datasetId },
@@ -198,6 +201,14 @@ export async function refreshMergedDataset(
     return {
       applied: false,
       message: "出典のデータセットが見つかりません。",
+      reason: "source_gone",
+    };
+  }
+  // 出典がゴミ箱に入っている(取り下げられた)ときは、その内容で作り直さない
+  if (dsA.status === "TRASHED" || dsB.status === "TRASHED") {
+    return {
+      applied: false,
+      message: "出典のデータセットがゴミ箱に入っているため、作り直せません。",
       reason: "source_gone",
     };
   }

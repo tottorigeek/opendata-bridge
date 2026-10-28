@@ -5,6 +5,71 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import { coreBounds, type MapPoint } from "@/lib/geo";
+import { CLUSTER_LEGEND_GRADIENT, clusterColor } from "@/lib/cluster-color";
+
+/** クラスター表示のオン・オフを覚えておく localStorage のキー。 */
+const CLUSTER_PREF_KEY = "odb-map-cluster";
+
+function readClusterPref(): boolean {
+  try {
+    return window.localStorage.getItem(CLUSTER_PREF_KEY) !== "off";
+  } catch {
+    return true; // プライベートブラウズなどで使えないときは既定(オン)
+  }
+}
+
+function writeClusterPref(on: boolean) {
+  try {
+    window.localStorage.setItem(CLUSTER_PREF_KEY, on ? "on" : "off");
+  } catch {
+    // 覚えられなくても表示の切り替え自体は効くので、何もしない
+  }
+}
+
+/** 右上のクラスター表示の切り替えボタン。押されたら onToggle を呼ぶ。 */
+function createClusterToggle(initial: boolean, onToggle: (on: boolean) => void): L.Control {
+  const Control = L.Control.extend({
+    onAdd() {
+      const bar = L.DomUtil.create("div", "leaflet-bar");
+      const button = L.DomUtil.create("a", "odb-map-cluster-toggle", bar);
+      button.href = "#";
+      button.setAttribute("role", "switch");
+      let on = initial;
+      const render = () => {
+        button.textContent = `クラスター表示 ${on ? "オン" : "オフ"}`;
+        button.setAttribute("aria-checked", String(on));
+        button.title = on ? "近い地点をまとめずに、すべて表示する" : "近い地点をまとめて件数で表示する";
+      };
+      L.DomEvent.on(button, "click", (e) => {
+        L.DomEvent.preventDefault(e);
+        L.DomEvent.stopPropagation(e);
+        on = !on;
+        render();
+        onToggle(on);
+      });
+      render();
+      return bar;
+    },
+  });
+  return new Control({ position: "topright" });
+}
+
+/** 左下の凡例(クラスターの色 = 件数の多さ)。 */
+function createClusterLegend(): L.Control {
+  const Control = L.Control.extend({
+    onAdd() {
+      const box = L.DomUtil.create("div", "odb-map-legend");
+      const low = L.DomUtil.create("span", "", box);
+      low.textContent = "件数 少";
+      const bar = L.DomUtil.create("span", "odb-map-legend-bar", box);
+      bar.style.background = CLUSTER_LEGEND_GRADIENT;
+      const high = L.DomUtil.create("span", "", box);
+      high.textContent = "多";
+      return box;
+    },
+  });
+  return new Control({ position: "bottomleft" });
+}
 
 /** ポップアップに出す列の上限。列の多いデータセットでポップアップが縦に伸びすぎないように。 */
 const MAX_POPUP_FIELDS = 8;
@@ -40,14 +105,20 @@ const pointIcon = L.divIcon({
   popupAnchor: [0, -6],
 });
 
-/** クラスター(まとめた地点)のアイコン。件数に応じて大きさを変える。 */
-function clusterIcon(count: number): L.DivIcon {
+/**
+ * クラスター(まとめた地点)のアイコン。件数に応じて大きさを変え、
+ * いま見えているクラスターの中で件数が多いほど赤に近い色にする(lib/cluster-color.ts)。
+ */
+function clusterIcon(count: number, maxVisible: number): L.DivIcon {
   const size = count < 10 ? 34 : count < 100 ? 42 : 52;
   const label = document.createElement("span");
   label.textContent = count.toLocaleString("ja-JP");
   // Leaflet がアイコンの表示方法を上書きするため、flex に頼らず行の高さで上下中央に置く
-  // (6 は上下の枠線 3px ずつ)
+  // (6 は上下の枠線 3px ずつ)。色は丸全体を塗るこの要素に付ける。
   label.style.display = "block";
+  label.style.height = "100%";
+  label.style.borderRadius = "9999px";
+  label.style.background = clusterColor(count, maxVisible);
   label.style.lineHeight = `${size - 6}px`;
   label.style.textAlign = "center";
   return L.divIcon({
@@ -167,25 +238,74 @@ export default function DatasetMap({ points }: { points: MapPoint[] }) {
         minZoom: 5,
       }).addTo(map);
 
+      // 色の基準にする「いま見えているクラスターの最大件数」。移動・拡大のたびに更新する。
+      let maxVisible = 2;
       const cluster = L.markerClusterGroup({
         showCoverageOnHover: false,
         spiderfyOnMaxZoom: true,
         maxClusterRadius: 50,
         // 数千点を 1 点ずつ足すとその間ページが固まるので、まとめて少しずつ処理させる
         chunkedLoading: true,
-        iconCreateFunction: (c) => clusterIcon(c.getChildCount()),
+        iconCreateFunction: (c) => clusterIcon(c.getChildCount(), maxVisible),
       });
       const markers = points.map((p) =>
         L.marker([p.lat, p.lng], { icon: pointIcon }).bindPopup(() => popupContent(p), {
           maxWidth: 320,
         }),
       );
+      // クラスターを使わないときの入れ物(全地点をそのまま出す)
+      const plain = L.layerGroup(markers);
+      const legend = createClusterLegend();
+      const currentMap = map;
+
+      /**
+       * 見えているクラスターの最大件数を数え直し、変わっていれば色を塗り直す。
+       * 各地点の「いま見えている親」(クラスターまたは地点自身)を引き、そのうちのクラスターの件数を見る。
+       */
+      const recolor = () => {
+        if (!currentMap.hasLayer(cluster)) return;
+        const view = currentMap.getBounds();
+        let max = 2;
+        const seen = new Set<L.Marker>();
+        for (const m of markers) {
+          if (!view.contains(m.getLatLng())) continue;
+          const parent = cluster.getVisibleParent(m) as L.Marker & { getChildCount?: () => number };
+          if (!parent || seen.has(parent)) continue;
+          seen.add(parent);
+          if (parent.getChildCount) max = Math.max(max, parent.getChildCount());
+        }
+        if (max !== maxVisible) {
+          maxVisible = max;
+          cluster.refreshClusters();
+        }
+      };
+
+      const setClustered = (on: boolean) => {
+        if (on) {
+          currentMap.removeLayer(plain);
+          cluster.addTo(currentMap);
+          legend.addTo(currentMap);
+          recolor();
+        } else {
+          currentMap.removeLayer(cluster);
+          legend.remove();
+          plain.addTo(currentMap);
+        }
+      };
+
       // 最初の表示範囲は、点が集まっている部分に合わせる(遠く離れた数件で引きすぎないように)。
       // 点の座標から直接求めるので、クラスターの計算が終わる前でも正しく合わせられる。
       const bounds = coreBounds(points);
       if (bounds) map.fitBounds(bounds, { padding: [24, 24], maxZoom: 15 });
-      cluster.addTo(map);
       cluster.addLayers(markers);
+      currentMap.on("moveend", recolor);
+      cluster.on("animationend", recolor);
+      const clusteredAtStart = readClusterPref();
+      setClustered(clusteredAtStart);
+      createClusterToggle(clusteredAtStart, (on) => {
+        writeClusterPref(on);
+        setClustered(on);
+      }).addTo(map);
       createFullscreenControl(wrapper, map).addTo(map);
     })();
 

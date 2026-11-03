@@ -1,6 +1,11 @@
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { bufferToCsvTable, readCsvForDownload, readCurrentDatasetCsv } from "@/lib/csv";
+import {
+  bufferToCsvTable,
+  readCsvForDownload,
+  readCurrentDatasetCsv,
+  readVersionCsvForDownload,
+} from "@/lib/csv";
 import { detectCoordinateColumns, toGeoJson } from "@/lib/geo";
 import { readVersionCsv } from "@/lib/versions";
 
@@ -83,8 +88,10 @@ export async function GET(
     });
   }
 
+  // 過去の版も最新版と同じ数式インジェクション対策・UTF-8 正規化を通す
+  // (保存済みの実体をそのまま返すと、版を指定するだけで対策を素通りできてしまう)
   const buffer = versionNumber
-    ? await readVersionCsv(id, versionNumber)
+    ? await readVersionCsvForDownload(id, versionNumber)
     : await readCsvForDownload(id);
   if (!buffer) {
     return new Response("ファイルが見つかりません。", { status: 404 });
